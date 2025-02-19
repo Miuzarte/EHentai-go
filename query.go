@@ -129,7 +129,10 @@ type EhFSearchResult struct {
 	Pages  string
 }
 
-var foundReg = regexp.MustCompile(`Found (\d+) results?`)
+// Found about 192,819 results.
+// Found 2 results.
+// Found 1 result.
+var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
 // total != len(results) 即不止一页
 func queryFSearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
@@ -171,7 +174,7 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 	if matches[1] == "" {
 		return 0, nil, ErrEmptyMatch
 	}
-	total, _ = strconv.Atoi(matches[1])
+	total, _ = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
 	if total == 0 {
 		return 0, nil, ErrNoResult
 	}
