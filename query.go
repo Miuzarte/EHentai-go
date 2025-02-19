@@ -149,7 +149,6 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		querys.Set("f_cats", cate.Format())
 	}
 	if keyword != "" {
-		// querys.Set("f_search", netUrl.QueryEscape(keyword))
 		querys.Set("f_search", keyword)
 	}
 	u.RawQuery = querys.Encode()
