@@ -40,14 +40,12 @@ func (db *Database) Ok() bool {
 }
 
 func (db *Database) Init() error {
-	// tn := time.Now()
 	data, err := db.Download(DATABASE_URL)
 	if err != nil {
 		return err
 	}
-	// fmt.Println("database downloaded in", time.Since(tn))
 
-	// tn = time.Now()
+	// tn := time.Now()
 	err = db.Unmarshal(data)
 	if err != nil {
 		return err
@@ -88,11 +86,12 @@ func (db *Database) Unmarshal(data []byte) error {
 		if i == 0 {
 			continue
 		}
-		namespace := data.Get("namespace").String()
-		// tag 对应的翻译
-		for tag, value := range data.Get("data").Map() {
-			(*db)[namespace][tag] = value.Get("name").String()
-		}
+		go func(data gjson.Result) { // tag 对应的翻译
+			namespace := data.Get("namespace").String()
+			for tag, value := range data.Get("data").Map() {
+				(*db)[namespace][tag] = value.Get("name").String()
+			}
+		}(data)
 	}
 
 	return nil

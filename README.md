@@ -16,7 +16,7 @@ EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 ### 初始化 [EhTagTranslation](github.com/EhTagTranslation/Database) 数据库
 
 ```go
-// 在 AMD Ryzen 5600x 上, 解析数据大概耗时 20ms
+// 在 AMD Ryzen 5600x(6c12t) 上, 解析数据大概耗时 4ms
 err := EHentai.InitEhTagDB()
 if err != nil {
     panic(err)
