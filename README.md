@@ -47,8 +47,6 @@ EHentai.SetRetryDepth(2)
 
 ### 搜索 E(x)Hentai
 
-todo: categories search
-
 ```go
 // 没做翻页, results 可能比 total 要少
 total, results, err := EHentai.EHQueryFSearch("keyword")
@@ -60,6 +58,11 @@ fmt.Println("Total results:", total)
 for _, result := range results {
     fmt.Printf("%+v", result)
 }
+
+// 分类搜索:
+EHentai.EHQueryFSearch("keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
+// 直接合起来应该也行
+EHentai.EHQueryFSearch("keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
 ```
 
 ### 搜索 E(x)Hentai, 并通过官方 API 获取画廊的详细信息
