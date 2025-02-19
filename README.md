@@ -13,7 +13,7 @@ EHentai access for go, with EhTagTranslation support.
 EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 ```
 
-### 初始化 EhTagTranslation 数据库
+### 初始化 [EhTagTranslation](github.com/EhTagTranslation/Database) 数据库
 
 ```go
 // 在 AMD Ryzen 5600x 上, 解析数据大概耗时 20ms
