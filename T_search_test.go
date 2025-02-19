@@ -3,8 +3,16 @@ package EHentai
 import "testing"
 
 func TestEHSearch(t *testing.T) {
-	_, galleries, err := EHQueryFSearch("耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
+	_, galleries, err := EHQueryFSearch("耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜", CATEGORY_DOUJINSHI|CATEGORY_MANGA)
 	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	for _, gallery := range galleries {
+		t.Logf("\n%+v\n", gallery)
+	}
+	_, galleries, err = EHQueryFSearch("耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜", CATEGORY_MANGA)
+	if err != nil && err != ErrNoHitsFound {
 		t.Error(err)
 		t.FailNow()
 	}

@@ -17,6 +17,63 @@ const (
 	EXHENTAI_URL = `https://exhentai.org`
 )
 
+type Category uint
+
+const ( // 实际 query 时要用 1023^CATEGORY_XXX
+	CATEGORY_MISC Category = 1 << iota
+	CATEGORY_DOUJINSHI
+	CATEGORY_MANGA
+	CATEGORY_ARTIST_CG
+	CATEGORY_GAME_CG
+	CATEGORY_IMAGE_SET
+	CATEGORY_COSPLAY
+	CATEGORY_ASIAN_PORN
+	CATEGORY_NON_H
+	CATEGORY_WESTERN
+)
+
+const CATEGORY_COUNT = 10
+
+func (c Category) Str() string {
+	switch c {
+	case CATEGORY_MISC:
+		return "Miscellaneous"
+	case CATEGORY_DOUJINSHI:
+		return "Doujinshi"
+	case CATEGORY_MANGA:
+		return "Manga"
+	case CATEGORY_ARTIST_CG:
+		return "Artist CG"
+	case CATEGORY_GAME_CG:
+		return "Game CG"
+	case CATEGORY_IMAGE_SET:
+		return "Image Set"
+	case CATEGORY_COSPLAY:
+		return "Cosplay"
+	case CATEGORY_ASIAN_PORN:
+		return "Asian Porn"
+	case CATEGORY_NON_H:
+		return "Non-H"
+	case CATEGORY_WESTERN:
+		return "Western"
+	}
+	return "unknown"
+}
+
+func (c Category) String() string {
+	var cats []string
+	for i := range CATEGORY_COUNT {
+		if c&(1<<i) != 0 {
+			cats = append(cats, Category(1<<i).Str())
+		}
+	}
+	return strings.Join(cats, " | ")
+}
+
+func (c Category) Format() string {
+	return strconv.FormatUint(uint64(1023^c), 10)
+}
+
 var (
 	ErrCookieNotSet        = errors.New("cookie not set")
 	ErrEmptyKeyword        = errors.New("empty keyword")
@@ -45,7 +102,11 @@ func (c *Cookie) String() string {
 	if !c.Ok() {
 		return ""
 	}
-	return "ipb_member_id=" + c.IpbMemberId + "; ipb_pass_hash=" + c.IpbPassHash + "; igneous=" + c.Igneous + "; sk=" + c.Sk
+	s := "ipb_member_id=" + c.IpbMemberId + "; ipb_pass_hash=" + c.IpbPassHash + "; igneous=" + c.Igneous
+	if c.Sk != "" {
+		s += "; sk=" + c.Sk
+	}
+	return s
 }
 
 func (c *Cookie) Ok() bool {
@@ -71,8 +132,8 @@ type EhFSearchResult struct {
 var foundReg = regexp.MustCompile(`Found (\d+) results?`)
 
 // total != len(results) 即不止一页
-func queryFSearch(url, keyword string) (total int, results []EhFSearchResult, err error) {
-	if keyword == "" {
+func queryFSearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
+	if keyword == "" && len(categories) == 0 {
 		return 0, nil, ErrEmptyKeyword
 	}
 	u, err := netUrl.Parse(url)
@@ -80,7 +141,17 @@ func queryFSearch(url, keyword string) (total int, results []EhFSearchResult, er
 		return 0, nil, err
 	}
 	querys := make(netUrl.Values)
-	querys.Set("f_search", netUrl.QueryEscape(keyword))
+	if len(categories) != 0 {
+		var cate Category
+		for _, c := range categories {
+			cate |= c
+		}
+		querys.Set("f_cats", cate.Format())
+	}
+	if keyword != "" {
+		// querys.Set("f_search", netUrl.QueryEscape(keyword))
+		querys.Set("f_search", keyword)
+	}
 	u.RawQuery = querys.Encode()
 	doc, err := httpGetDoc(u)
 	if err != nil {
@@ -294,7 +365,6 @@ func downloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
 
 // downloadImage 从图片直链下载
 func downloadImage(imgUrl string) (imgData []byte, err error) {
-	// fmt.Println("downloading:", imgUrl)
 	u, err := netUrl.Parse(imgUrl)
 	if err != nil {
 		return nil, err
