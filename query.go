@@ -124,6 +124,7 @@ type EhFSearchResult struct {
 	Gid    int
 	Token  string
 	Cat    string
+	Cover  string
 	Rating string
 	Url    string
 	Tags   []string
@@ -193,13 +194,18 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 			return
 		}
 		// cat   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl1c.glcat > div"
-		// stars "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div:nth-child(3) > div.ir"
+		// cover "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div > div > img"
+		// stars "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div > div.ir"
 		// url   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a"
 		// tag1  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(1)"
 		// tag2  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(2)"
 		// title "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a > div.glink"
 		// pages "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl4c.glhide > div:nth-child(2)"
 		cat := s.Find("td.gl1c.glcat > div").Text()
+		cover, _ := s.Find("td.gl2c > div > div > img").Attr("data-src")
+		if cover == "" {
+			cover, _ = s.Find("td.gl2c > div > div > img").Attr("src")
+		}
 		stars, _ := s.Find("td.gl2c > div > div.ir").Attr("style")
 		url, _ := s.Find("td.gl3c.glname > a").Attr("href")
 		var tags []string
@@ -210,7 +216,7 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
 		if gId != 0 && gToken != "" {
-			results = append(results, EhFSearchResult{domain, gId, gToken, cat, parseStarts(stars), url, TranslateMulti(tags), title, pages})
+			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStarts(stars), url, TranslateMulti(tags), title, pages})
 		}
 	})
 	return
@@ -227,10 +233,10 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 // 1   background-position:-64px -1px;opacity:1
 // 0.5 background-position:-64px -21px;opacity:1
 // 0   background-position:-80px -1px;opacity:1
-var startsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
+var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
 
 func parseStarts(stars string) (rating string) {
-	matches := startsReg.FindStringSubmatch(stars)
+	matches := starsReg.FindStringSubmatch(stars)
 	if len(matches) == 0 {
 		return ""
 	}
