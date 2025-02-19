@@ -123,6 +123,8 @@ type EhFSearchResult struct {
 	Domain Domain
 	Gid    int
 	Token  string
+	Cat    string
+	Rating string
 	Url    string
 	Tags   []string
 	Title  string // 根据 cookie 中的 sk, 结果可能为英文或日文
@@ -190,11 +192,15 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		if i == 0 { // 表头
 			return
 		}
+		// cat   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl1c.glcat > div"
+		// stars "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div:nth-child(3) > div.ir"
 		// url   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a"
 		// tag1  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(1)"
 		// tag2  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(2)"
 		// title "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a > div.glink"
 		// pages "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl4c.glhide > div:nth-child(2)"
+		cat := s.Find("td.gl1c.glcat > div").Text()
+		stars, _ := s.Find("td.gl2c > div > div.ir").Attr("style")
 		url, _ := s.Find("td.gl3c.glname > a").Attr("href")
 		var tags []string
 		s.Find("td.gl3c.glname > a > div > div.gt").Each(func(i int, s *goquery.Selection) {
@@ -204,10 +210,46 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
 		if gId != 0 && gToken != "" {
-			results = append(results, EhFSearchResult{domain, gId, gToken, url, TranslateMulti(tags), title, pages})
+			results = append(results, EhFSearchResult{domain, gId, gToken, cat, parseStarts(stars), url, TranslateMulti(tags), title, pages})
 		}
 	})
 	return
+}
+
+// 5   background-position:0px -1px;opacity:1
+// 4.5 background-position:0px -21px;opacity:1
+// 4   background-position:-16px -1px;opacity:1
+// 3.5 background-position:-16px -21px;opacity:1
+// 3   background-position:-32px -1px;opacity:1
+// 2.5 background-position:-32px -21px;opacity:1
+// 2   background-position:-48px -1px;opacity:1
+// 1.5 background-position:-48px -21px;opacity:1
+// 1   background-position:-64px -1px;opacity:1
+// 0.5 background-position:-64px -21px;opacity:1
+// 0   background-position:-80px -1px;opacity:1
+var startsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
+
+func parseStarts(stars string) (rating string) {
+	matches := startsReg.FindStringSubmatch(stars)
+	if len(matches) == 0 {
+		return ""
+	}
+	x, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return ""
+	}
+	y, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return ""
+	}
+	units := 5
+	decimal := 0
+	if y == -21 {
+		units -= 1
+		decimal = 5
+	}
+	units -= (-x / 16)
+	return strconv.Itoa(units) + "." + strconv.Itoa(decimal)
 }
 
 // Showing 1 - 20 of 65 images
