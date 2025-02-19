@@ -202,8 +202,8 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		// title "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a > div.glink"
 		// pages "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl4c.glhide > div:nth-child(2)"
 		cat := s.Find("td.gl1c.glcat > div").Text()
-		cover, _ := s.Find("td.gl2c > div > div > img").Attr("data-src")
-		if cover == "" {
+		cover, ok := s.Find("td.gl2c > div > div > img").Attr("data-src")
+		if !ok {
 			cover, _ = s.Find("td.gl2c > div > div > img").Attr("src")
 		}
 		stars, _ := s.Find("td.gl2c > div > div.ir").Attr("style")
@@ -216,7 +216,7 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
 		if gId != 0 && gToken != "" {
-			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStarts(stars), url, TranslateMulti(tags), title, pages})
+			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, TranslateMulti(tags), title, pages})
 		}
 	})
 	return
@@ -235,7 +235,7 @@ func queryFSearch(url, keyword string, categories ...Category) (total int, resul
 // 0   background-position:-80px -1px;opacity:1
 var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
 
-func parseStarts(stars string) (rating string) {
+func parseStars(stars string) (rating string) {
 	matches := starsReg.FindStringSubmatch(stars)
 	if len(matches) == 0 {
 		return ""
@@ -250,7 +250,7 @@ func parseStarts(stars string) (rating string) {
 	}
 	units := 5
 	decimal := 0
-	if y == -21 {
+	if y < -21 {
 		units -= 1
 		decimal = 5
 	}
