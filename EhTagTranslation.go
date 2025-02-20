@@ -46,10 +46,7 @@ func (db *Database) Init() error {
 	}
 
 	// tn := time.Now()
-	err = db.Unmarshal(data)
-	if err != nil {
-		return err
-	}
+	db.Unmarshal(data)
 	// fmt.Println("database unmarshaled in", time.Since(tn))
 
 	return nil
@@ -68,7 +65,7 @@ func (db *Database) Download(url string) ([]byte, error) {
 	return data, nil
 }
 
-func (db *Database) Unmarshal(data []byte) error {
+func (db *Database) Unmarshal(data []byte) {
 	jDataArr := gjson.ParseBytes(data).Get("data").Array()
 
 	// 内容索引, data 内为所有的 namespace
@@ -86,15 +83,13 @@ func (db *Database) Unmarshal(data []byte) error {
 		if i == 0 {
 			continue
 		}
-		go func(data gjson.Result) { // tag 对应的翻译
+		go func() { // tag 对应的翻译
 			namespace := data.Get("namespace").String()
 			for tag, value := range data.Get("data").Map() {
 				(*db)[namespace][tag] = value.Get("name").String()
 			}
-		}(data)
+		}()
 	}
-
-	return nil
 }
 
 func (db *Database) Info() map[string]int {
