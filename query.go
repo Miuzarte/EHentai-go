@@ -2,7 +2,6 @@ package EHentai
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	netUrl "net/url"
 	"regexp"
@@ -87,6 +86,8 @@ var (
 	ErrEndGreaterThanTotal = errors.New("end > total")
 	ErrNoImage             = errors.New("no image")
 	ErrEmptyBody           = errors.New("empty body")
+	ErrEmptyPageUrl        = errors.New("empty page url")
+	ErrEmptyImageData      = errors.New("empty image data")
 	ErrInvalidContentType  = errors.New("invalid content type")
 	ErrNoPageUrls          = errors.New("no page urls")
 )
@@ -270,6 +271,9 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		return nil, err
 	}
 	doc, err := httpGetDoc(u)
+	if err != nil {
+		return nil, err
+	}
 
 	// body > div:nth-child(*) > p
 	// <p class="gpc">Showing 1 - 5 of 5 images</p>
@@ -297,21 +301,56 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		}
 	}
 
-	for page := range pages {
-		if page != 0 { // 起始页不需要重新加载
-			u.RawQuery = "p=" + strconv.Itoa(page)
-			doc, err = httpGetDoc(u)
-			if err != nil {
-				return nil, err
+	pageUrls = make([]string, total)
+	errs := make([]error, pages)
+	jobs := make(chan int, pages)
+	results := make(chan int, pages)
+
+	for range threads { // workers
+		go func() {
+			for pageI := range jobs {
+				var pageDoc *goquery.Document
+				if pageI == 0 { // 起始页不需要重新加载
+					pageDoc = doc
+				} else {
+					u.RawQuery = "p=" + strconv.Itoa(pageI)
+					pageDoc, err = httpGetDoc(u)
+					if err != nil {
+						errs[pageI] = err
+						return
+					}
+				}
+				// #gdt > a:nth-child(*)
+				pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
+					pageUrls[pageI*end+i] = s.AttrOr("href", "")
+				})
+				results <- pageI
 			}
-		}
-		// #gdt > a:nth-child(*)
-		doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-			href, _ := s.Attr("href")
-			pageUrls = append(pageUrls, href)
-		})
+		}()
 	}
-	return
+
+	for pageI := range pages { // dispatcher
+		jobs <- pageI
+	}
+	close(jobs)
+
+	for range pages {
+		<-results
+	}
+
+	for i := range errs {
+		if errs[i] != nil {
+			return nil, err
+		}
+	}
+
+	for i := range pageUrls {
+		if pageUrls[i] == "" {
+			return nil, ErrEmptyPageUrl
+		}
+	}
+
+	return pageUrls, nil
 }
 
 // fetchPageImageUrl 获取画廊某页的图直链与页备链
@@ -356,6 +395,7 @@ func downloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
 	if len(pageUrls) == 0 {
 		return nil, ErrNoPageUrls
 	}
+
 	imgDatas = make([][]byte, len(pageUrls))
 	errs := make([]error, len(pageUrls))
 	jobs := make(chan int, len(pageUrls))
@@ -363,34 +403,34 @@ func downloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
 
 	for range threads { // workers
 		go func() {
-			for i := range jobs {
+			for pageI := range jobs {
 				R := retryDepth
 			retry:
-				imgUrl, bakPage, err := fetchPageImageUrl(pageUrls[i])
+				imgUrl, bakPage, err := fetchPageImageUrl(pageUrls[pageI])
 				if err != nil {
-					errs[i] = err
-					results <- i
+					errs[pageI] = err
+					results <- pageI
 					continue
 				}
 				data, err := downloadImage(imgUrl)
 				if err != nil {
 					if bakPage != "" && R > 0 {
-						pageUrls[i] = bakPage
+						pageUrls[pageI] = bakPage
 						R--
 						goto retry
 					}
-					errs[i] = err
-					results <- i
+					errs[pageI] = err
+					results <- pageI
 					continue
 				}
-				imgDatas[i] = data
-				results <- i
+				imgDatas[pageI] = data
+				results <- pageI
 			}
 		}()
 	}
 
-	for i := range pageUrls { // dispatcher
-		jobs <- i
+	for pageI := range pageUrls { // dispatcher
+		jobs <- pageI
 	}
 	close(jobs)
 
@@ -406,7 +446,7 @@ func downloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
 
 	for i := range imgDatas {
 		if len(imgDatas[i]) == 0 {
-			fmt.Println("empty data:", pageUrls[i])
+			return nil, ErrEmptyImageData
 		}
 	}
 
