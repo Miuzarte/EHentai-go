@@ -138,7 +138,7 @@ type EhFSearchResult struct {
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
 // total != len(results) 即不止一页
-func queryFSearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
+func querySearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
 	if keyword == "" && len(categories) == 0 {
 		return 0, nil, ErrEmptyKeyword
 	}

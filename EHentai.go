@@ -27,22 +27,22 @@ func InitEhTagDB() error {
 	return database.Init()
 }
 
-// EHQueryFSearch 搜索 EHentai, results 只有第一页结果
-func EHQueryFSearch(keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
-	return queryFSearch(EHENTAI_URL, keyword, categories...)
+// EHSearch 搜索 EHentai, results 只有第一页结果
+func EHSearch(keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
+	return querySearch(EHENTAI_URL, keyword, categories...)
 }
 
-// ExHQueryFSearch 搜索 ExHentai, results 只有第一页结果
-func ExHQueryFSearch(keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
+// ExHSearch 搜索 ExHentai, results 只有第一页结果
+func ExHSearch(keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
 	if !cookie.Ok() {
 		return 0, nil, ErrCookieNotSet
 	}
-	return queryFSearch(EXHENTAI_URL, keyword, categories...)
+	return querySearch(EXHENTAI_URL, keyword, categories...)
 }
 
 // EHSearchDetail 搜索 EHentai, 返回详细信息, results 只有第一页结果
 func EHSearchDetail(keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
-	_, results, err := EHQueryFSearch(keyword, categories...)
+	_, results, err := EHSearch(keyword, categories...)
 	if err != nil {
 		return
 	}
@@ -56,7 +56,7 @@ func EHSearchDetail(keyword string, categories ...Category) (total int, gallerie
 
 // ExHSearchDetail 搜索 ExHentai, 返回详细信息, results 只有第一页结果
 func ExHSearchDetail(keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
-	total, results, err := ExHQueryFSearch(keyword, categories...)
+	total, results, err := ExHSearch(keyword, categories...)
 	if err != nil {
 		return
 	}
