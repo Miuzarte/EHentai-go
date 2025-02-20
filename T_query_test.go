@@ -14,7 +14,7 @@ func TestEhQueryFSearch(t *testing.T) {
 	// t.Logf("%+v", results)
 
 	SetCookie("", "", "", "")
-	_, results, err := queryFSearch(EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
+	_, results, err := querySearch(EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
 	if err != nil {
 		t.Error(err)
 		t.FailNow()

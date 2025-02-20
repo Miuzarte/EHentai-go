@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/tidwall/gjson"
 )
@@ -79,17 +80,21 @@ func (db *Database) Unmarshal(data []byte) {
 	}
 
 	// 解析每个 namespace
+	wg := sync.WaitGroup{}
+	wg.Add(len(jDataArr) - 1)
 	for i, data := range jDataArr {
 		if i == 0 {
 			continue
 		}
 		go func() { // tag 对应的翻译
+			defer wg.Done()
 			namespace := data.Get("namespace").String()
 			for tag, value := range data.Get("data").Map() {
 				(*db)[namespace][tag] = value.Get("name").String()
 			}
 		}()
 	}
+	wg.Wait()
 }
 
 func (db *Database) Info() map[string]int {
