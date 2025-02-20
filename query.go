@@ -216,7 +216,7 @@ func querySearch(url, keyword string, categories ...Category) (total int, result
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
 		if gId != 0 && gToken != "" {
-			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, TranslateMulti(tags), title, pages})
+			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, tags, title, pages})
 		}
 	})
 	return
