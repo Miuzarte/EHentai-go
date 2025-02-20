@@ -76,7 +76,7 @@ func (c Category) Format() string {
 
 var (
 	ErrCookieNotSet        = errors.New("cookie not set")
-	ErrEmptyKeyword        = errors.New("empty keyword")
+	ErrSadPanda            = errors.New("sad panda")
 	ErrNoHitsFound         = errors.New("no hits found")
 	ErrNoMatch             = errors.New("no match")
 	ErrEmptyMatch          = errors.New("empty match")
@@ -139,9 +139,6 @@ var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
 // total != len(results) 即不止一页
 func querySearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
-	if keyword == "" && len(categories) == 0 {
-		return 0, nil, ErrEmptyKeyword
-	}
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err

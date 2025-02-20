@@ -124,5 +124,16 @@ func httpGetDoc(url *netUrl.URL) (*goquery.Document, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if !sadPandaCheck(doc) {
+		return nil, ErrSadPanda
+	}
+	return doc, nil
+}
+
+func sadPandaCheck(doc *goquery.Document) bool {
+	return doc.Find("head").Length() == 0 && doc.Find("body").Length() == 0
 }
