@@ -6,6 +6,7 @@ import (
 	netUrl "net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -107,6 +108,15 @@ func UrlGetPTokenGIdPIndex(u string) (domain Domain, pToken string, gId int, pIn
 	return "", "", 0, 0
 }
 
+func containsNonASCII(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return true
+		}
+	}
+	return false
+}
+
 func httpGet(url *netUrl.URL) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
 	if err != nil {
@@ -128,7 +138,7 @@ func httpGetDoc(url *netUrl.URL) (*goquery.Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !sadPandaCheck(doc) {
+	if sadPandaCheck(doc) {
 		return nil, ErrSadPanda
 	}
 	return doc, nil
