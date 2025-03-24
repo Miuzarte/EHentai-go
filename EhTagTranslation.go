@@ -1,8 +1,10 @@
 package EHentai
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -47,8 +49,11 @@ func (db *Database) Init() error {
 	}
 
 	// tn := time.Now()
-	db.Unmarshal(data)
+	err = db.Unmarshal(data)
 	// fmt.Println("database unmarshaled in", time.Since(tn))
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -63,11 +68,22 @@ func (db *Database) Download(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(data) == 0 {
+		return nil, errors.New("empty downloaded content")
+	}
 	return data, nil
 }
 
-func (db *Database) Unmarshal(data []byte) {
+func (db *Database) Unmarshal(data []byte) error {
 	jDataArr := gjson.ParseBytes(data).Get("data").Array()
+	if len(jDataArr) == 0 {
+		fs, err := os.Open("EhTagTranslation_dump.txt")
+		if err == nil {
+			fs.Write(data)
+			fs.Close()
+		}
+		return errors.New("failed to parse json")
+	}
 
 	// 内容索引, data 内为所有的 namespace
 	rows := jDataArr[0]
@@ -95,6 +111,8 @@ func (db *Database) Unmarshal(data []byte) {
 		}()
 	}
 	wg.Wait()
+
+	return nil
 }
 
 func (db *Database) Info() map[string]int {
