@@ -1,12 +1,15 @@
 package EHentai
 
 import (
+	"context"
 	"errors"
 	"io"
 	netUrl "net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -86,8 +89,8 @@ var (
 	ErrEndGreaterThanTotal = errors.New("end > total")
 	ErrNoImage             = errors.New("no image")
 	ErrEmptyBody           = errors.New("empty body")
-	ErrEmptyPageUrl        = errors.New("empty page url")
-	ErrEmptyImageData      = errors.New("empty image data")
+	ErrFoundEmptyPageUrl   = errors.New("found empty page url")
+	ErrFoundEmptyImageData = errors.New("found empty image data")
 	ErrInvalidContentType  = errors.New("invalid content type")
 	ErrNoPageUrls          = errors.New("no page urls")
 )
@@ -113,12 +116,6 @@ func (c *Cookie) String() string {
 func (c *Cookie) Ok() bool {
 	return c.IpbMemberId != "" && c.IpbPassHash != "" && c.Igneous != "" // sk 可以为空
 }
-
-var (
-	cookie     = &Cookie{}
-	threads    = 4 // 下载并发数
-	retryDepth = 2 // 使用页备链重试次数
-)
 
 type EhFSearchResult struct {
 	Domain Domain
@@ -156,7 +153,10 @@ func querySearch(url, keyword string, categories ...Category) (total int, result
 		querys.Set("f_search", keyword)
 	}
 	u.RawQuery = querys.Encode()
-	doc, err := httpGetDoc(u)
+
+	ctx, cancel := TimeoutCtx()
+	defer cancel()
+	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -267,7 +267,9 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	doc, err := httpGetDoc(u)
+	ctx, cancel := TimeoutCtx()
+	defer cancel()
+	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -298,53 +300,53 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		}
 	}
 
+	wg := new(sync.WaitGroup)
+	wg.Add(pages)
 	pageUrls = make([]string, total)
-	errs := make([]error, pages)
-	jobs := make(chan int, pages)
-	results := make(chan int, pages)
+	errs := make(chan error, pages)
 
-	for range threads { // workers
-		go func() {
-			for pageI := range jobs {
-				var pageDoc *goquery.Document
-				if pageI == 0 { // 起始页不需要重新加载
-					pageDoc = doc
-				} else {
-					u.RawQuery = "p=" + strconv.Itoa(pageI)
-					pageDoc, err = httpGetDoc(u)
-					if err != nil {
-						errs[pageI] = err
-						return
-					}
+	ctx, cancel = TimeoutCtx()
+	defer cancel()
+	limiter := newLimiter(threads)
+	for page := range pages {
+		limiter.acquire()
+		go func(page int) {
+			defer func() {
+				limiter.release()
+				wg.Done()
+			}()
+
+			var pageDoc *goquery.Document
+			if page == 0 { // 起始页不需要重新加载
+				pageDoc = doc
+			} else {
+				u.RawQuery = "p=" + strconv.Itoa(page)
+				pageDoc, err = httpGetDoc(ctx, u)
+				if err != nil {
+					errs <- err
+					return
 				}
-				// #gdt > a:nth-child(*)
-				pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-					pageUrls[pageI*end+i] = s.AttrOr("href", "")
-				})
-				results <- pageI
 			}
-		}()
+			// #gdt > a:nth-child(*)
+			pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
+				pageUrls[page*end+i] = s.AttrOr("href", "")
+			})
+		}(page)
 	}
 
-	for pageI := range pages { // dispatcher
-		jobs <- pageI
-	}
-	close(jobs)
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
 
-	for range pages {
-		<-results
-	}
-
-	for i := range errs {
-		if errs[i] != nil {
+	for err := range errs {
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	for i := range pageUrls {
-		if pageUrls[i] == "" {
-			return nil, ErrEmptyPageUrl
-		}
+	if slices.Contains(pageUrls, "") {
+		return nil, ErrFoundEmptyPageUrl
 	}
 
 	return pageUrls, nil
@@ -356,7 +358,9 @@ func fetchPageImageUrl(pageUrl string) (imgUrl string, bakPage string, err error
 	if err != nil {
 		return "", "", err
 	}
-	doc, err := httpGetDoc(u)
+	ctx, cancel := TimeoutCtx()
+	defer cancel()
+	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return "", "", err
 	}
@@ -387,76 +391,13 @@ func nl(url, onclick string) string {
 	return u.String()
 }
 
-// downloadPages 并发下载画廊某页的图片, 下载失败时尝试备链
-func downloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
-	if len(pageUrls) == 0 {
-		return nil, ErrNoPageUrls
-	}
-
-	imgDatas = make([][]byte, len(pageUrls))
-	errs := make([]error, len(pageUrls))
-	jobs := make(chan int, len(pageUrls))
-	results := make(chan int, len(pageUrls))
-
-	for range threads { // workers
-		go func() {
-			for pageI := range jobs {
-				R := retryDepth
-			retry:
-				imgUrl, bakPage, err := fetchPageImageUrl(pageUrls[pageI])
-				if err != nil {
-					errs[pageI] = err
-					results <- pageI
-					continue
-				}
-				data, err := downloadImage(imgUrl)
-				if err != nil {
-					if bakPage != "" && R > 0 {
-						pageUrls[pageI] = bakPage
-						R--
-						goto retry
-					}
-					errs[pageI] = err
-					results <- pageI
-					continue
-				}
-				imgDatas[pageI] = data
-				results <- pageI
-			}
-		}()
-	}
-
-	for pageI := range pageUrls { // dispatcher
-		jobs <- pageI
-	}
-	close(jobs)
-
-	for range pageUrls {
-		<-results
-	}
-
-	for _, err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := range imgDatas {
-		if len(imgDatas[i]) == 0 {
-			return nil, ErrEmptyImageData
-		}
-	}
-
-	return imgDatas, nil
-}
-
 // downloadImage 从图片直链下载
-func downloadImage(imgUrl string) (imgData []byte, err error) {
+func downloadImage(ctx context.Context, imgUrl string) (imgData []byte, err error) {
 	u, err := netUrl.Parse(imgUrl)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := httpGet(u)
+	resp, err := httpGet(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -473,4 +414,70 @@ func downloadImage(imgUrl string) (imgData []byte, err error) {
 		return nil, ErrEmptyBody
 	}
 	return
+}
+
+// downloadPage 下载画廊某页的图片, 下载失败时尝试备链
+func downloadPage(ctx context.Context, pageUrl string) (imgData []byte, err error) {
+	R := retryDepth
+retry:
+	imgUrl, bakPage, err := fetchPageImageUrl(pageUrl)
+	if err != nil {
+		return nil, err
+	}
+	imgData, err = downloadImage(ctx, imgUrl)
+	if err != nil {
+		if bakPage != "" {
+			pageUrl = bakPage
+			R--
+			goto retry
+		}
+		return nil, err
+	}
+	return imgData, nil
+}
+
+// downloadPages 并发下载画廊某页的图片, 下载失败时尝试备链
+func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, err error) {
+	if len(pageUrls) == 0 {
+		return nil, ErrNoPageUrls
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(len(pageUrls))
+	imgDatas = make([][]byte, len(pageUrls))
+	errs := make(chan error, len(pageUrls))
+
+	limiter := newLimiter(threads)
+	for i, url := range pageUrls {
+		limiter.acquire()
+		go func(i int) {
+			defer func() {
+				limiter.release()
+				wg.Done()
+			}()
+
+			data, err := downloadPage(ctx, url)
+			imgDatas[i] = data
+			errs <- err
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	for err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for i := range imgDatas {
+		if len(imgDatas[i]) == 0 {
+			return nil, ErrFoundEmptyImageData
+		}
+	}
+
+	return imgDatas, nil
 }

@@ -1,12 +1,12 @@
 package EHentai
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	netUrl "net/url"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -18,16 +18,21 @@ const (
 	EXHENTAI_DOMAIN Domain = "exhentai.org"
 )
 
-func checkDomain(u string) error {
-	domain := urlGetDomain(u)
-	switch domain {
-	case EHENTAI_DOMAIN:
-	case EXHENTAI_DOMAIN:
-		if !cookie.Ok() {
-			return ErrCookieNotSet
+func checkDomain(u ...string) error {
+	if skipDomainCheck {
+		return nil
+	}
+	for _, u := range u {
+		domain := urlGetDomain(u)
+		switch domain {
+		case EHENTAI_DOMAIN:
+		case EXHENTAI_DOMAIN:
+			if !cookie.Ok() {
+				return ErrCookieNotSet
+			}
+		default:
+			return errors.New("invalid url")
 		}
-	default:
-		return errors.New("invalid url")
 	}
 	return nil
 }
@@ -108,17 +113,8 @@ func UrlGetPTokenGIdPIndex(u string) (domain Domain, pToken string, gId int, pIn
 	return "", "", 0, 0
 }
 
-func containsNonASCII(s string) bool {
-	for _, r := range s {
-		if r > unicode.MaxASCII {
-			return true
-		}
-	}
-	return false
-}
-
-func httpGet(url *netUrl.URL) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
+func httpGet(ctx context.Context, url *netUrl.URL) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +124,8 @@ func httpGet(url *netUrl.URL) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
-func httpGetDoc(url *netUrl.URL) (*goquery.Document, error) {
-	resp, err := httpGet(url)
+func httpGetDoc(ctx context.Context, url *netUrl.URL) (*goquery.Document, error) {
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, err
 	}

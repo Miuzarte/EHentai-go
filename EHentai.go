@@ -1,7 +1,18 @@
 package EHentai
 
 import (
+	"context"
+	"iter"
+	"time"
 	"unsafe"
+)
+
+var (
+	cookie          = &Cookie{}
+	skipDomainCheck = false // 跳过 exhentai 域名的 cookie 检查
+	threads         = 4     // 下载并发数
+	timeout         = time.Minute * 5
+	retryDepth      = 2 // 使用页备链重试次数
 )
 
 func SetCookie(memberId, passHash, igneous, sk string) {
@@ -11,9 +22,24 @@ func SetCookie(memberId, passHash, igneous, sk string) {
 	cookie.Sk = sk
 }
 
+// 设置跳过 exhentai 域名的 cookie 检查
+func SetSkipDomainCheck(b bool) {
+	skipDomainCheck = b
+}
+
 // SetThreads 设置下载线程数
 func SetThreads(n int) {
 	threads = n
+}
+
+// SetTimeout 设置超时时间
+func SetTimeout(d time.Duration) {
+	timeout = d
+}
+
+// TimeoutCtx 返回带超时的 context
+func TimeoutCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), timeout)
 }
 
 // SetRetryDepth 设置重试次数
@@ -40,9 +66,9 @@ func ExHSearch(keyword string, categories ...Category) (total int, results []EhF
 	return querySearch(EXHENTAI_URL, keyword, categories...)
 }
 
-// EHSearchDetail 搜索 EHentai, 返回详细信息, results 只有第一页结果
+// EHSearchDetail 搜索 EHentai 并返回详细信息, galleries 只有第一页结果
 func EHSearchDetail(keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
-	_, results, err := EHSearch(keyword, categories...)
+	total, results, err := EHSearch(keyword, categories...)
 	if err != nil {
 		return
 	}
@@ -54,7 +80,7 @@ func EHSearchDetail(keyword string, categories ...Category) (total int, gallerie
 	return total, resp.GMetadata, nil
 }
 
-// ExHSearchDetail 搜索 ExHentai, 返回详细信息, results 只有第一页结果
+// ExHSearchDetail 搜索 ExHentai 并返回详细信息, galleries 只有第一页结果
 func ExHSearchDetail(keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
 	total, results, err := ExHSearch(keyword, categories...)
 	if err != nil {
@@ -68,8 +94,60 @@ func ExHSearchDetail(keyword string, categories ...Category) (total int, galleri
 	return total, resp.GMetadata, nil
 }
 
-// DownloadGallery 下载画廊下所有图片, 下载失败时尝试备链
-func DownloadGallery(galleryUrl string) (imgDatas [][]byte, err error) {
+type Downloading struct {
+	Total   int
+	Current int
+	Data    []byte
+	Err     error
+}
+
+func DownloadIter(job *dlJob) iter.Seq2[[]byte, error] {
+	return func(yield func([]byte, error) bool) {
+		defer job.cancel()
+
+		for _, page := range job.pages {
+			err, ok := <-page.err
+			if !ok { // 已下载, 下载方关闭了 err
+				continue
+			}
+
+			if !yield(page.data, err) {
+				return
+			}
+		}
+	}
+}
+
+// DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
+func DownlaodGalleryIter(galleryUrl string) (iter.Seq2[[]byte, error], error) {
+	err := checkDomain(galleryUrl)
+	if err != nil {
+		return nil, err
+	}
+	pageUrls, err := fetchGalleryPages(galleryUrl)
+	if err != nil {
+		return nil, err
+	}
+	job := new(dlJob)
+	job.init(pageUrls)
+	job.startBackground()
+	return DownloadIter(job), nil
+}
+
+// DownloadPagesIter 以迭代器模式下载画廊某页的图片, 下载失败时自动尝试备链
+func DownloadPagesIter(pageUrls ...string) (iter.Seq2[[]byte, error], error) {
+	err := checkDomain(pageUrls...)
+	if err != nil {
+		return nil, err
+	}
+	job := new(dlJob)
+	job.init(pageUrls)
+	job.startBackground()
+	return DownloadIter(job), nil
+}
+
+// DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
+func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas [][]byte, err error) {
 	err = checkDomain(galleryUrl)
 	if err != nil {
 		return nil, err
@@ -78,18 +156,16 @@ func DownloadGallery(galleryUrl string) (imgDatas [][]byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return downloadPages(pageUrls...)
+	return downloadPages(ctx, pageUrls...)
 }
 
-// DownloadPages 下载画廊某页的图片, 下载失败时尝试备链
-func DownloadPages(pageUrls ...string) (imgDatas [][]byte, err error) {
-	for _, pageUrl := range pageUrls {
-		err = checkDomain(pageUrl)
-		if err != nil {
-			return nil, err
-		}
+// DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
+func DownloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, err error) {
+	err = checkDomain(pageUrls...)
+	if err != nil {
+		return nil, err
 	}
-	return downloadPages(pageUrls...)
+	return downloadPages(ctx, pageUrls...)
 }
 
 // FetchGalleryPageUrls 获取画廊下所有页链接
@@ -105,7 +181,8 @@ func FetchGalleryPageUrls(galleryUrl string) (pageUrls []string, err error) {
 // , 不建议使用
 // , [DownloadPages] 可使用备链自动重试
 func FetchGalleryImageUrls(galleryUrl string) (imgUrls []string, bakPages []string, err error) {
-	if err = checkDomain(galleryUrl); err != nil {
+	err = checkDomain(galleryUrl)
+	if err != nil {
 		return nil, nil, err
 	}
 	pageUrls, err := fetchGalleryPages(galleryUrl)
@@ -127,7 +204,8 @@ func FetchGalleryImageUrls(galleryUrl string) (imgUrls []string, bakPages []stri
 // , 不建议使用
 // , [DownloadPages] 可使用备链自动重试
 func FetchPageImageUrl(pageUrl string) (imgUrl string, bakPage string, err error) {
-	if err = checkDomain(pageUrl); err != nil {
+	err = checkDomain(pageUrl)
+	if err != nil {
 		return "", "", err
 	}
 	return fetchPageImageUrl(pageUrl)
@@ -136,10 +214,10 @@ func FetchPageImageUrl(pageUrl string) (imgUrl string, bakPage string, err error
 // DownloadImage 使用图片直链下载
 // , 不建议使用
 // , [DownloadPages] 可使用备链自动重试
-func DownloadImages(imgUrls ...string) (imgDatas [][]byte, err error) {
+func DownloadImages(ctx context.Context, imgUrls ...string) (imgDatas [][]byte, err error) {
 	for _, url := range imgUrls {
 		var data []byte
-		data, err = downloadImage(url)
+		data, err = downloadImage(ctx, url)
 		if err != nil {
 			return nil, err
 		}
