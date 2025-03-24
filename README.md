@@ -1,6 +1,6 @@
 # EHentai-go
 
-EHentai access for go, with EhTagTranslation support.
+EHentai access for go, with EhTagTranslation support, fully leveraging Go's concurrency advantages.
 
 给机器人做着玩的 部分功能有所缺失, 比如搜索没有翻页之类的
 
@@ -25,11 +25,32 @@ if err != nil {
 
 开了就关不掉了, 要更新的话再调用一次
 
+### 设置跳过 exhentai 域名的 cookie 检查
+
+```go
+// 默认为 false
+EHentai.SetSkipDomainCheck(false)
+```
+
 ### 设置下载并发数
 
 ```go
-// 默认为 4
+// 默认为 4, 不建议超过 16
 EHentai.SetThreads(4)
+```
+
+### 设置超时时间
+
+```go
+// 默认为 time.Minute * 5
+EHentai.SetTimeout(time.Minute * 5)
+
+// 除了部分带 ctx 参数的导出函数
+// , 该超时上下文会用于内部的所有请求
+
+// 手动使用:
+ctx, cancel := EHentai.TimeoutCtx()
+defer cancel()
 ```
 
 ### 设置 query nl 的重试次数
@@ -49,8 +70,8 @@ EHentai.SetRetryDepth(2)
 
 ```go
 // 没做翻页, results 可能比 total 要少
-total, results, err := EHentai.EHQueryFSearch("keyword")
-// total, results, err := EHentai.ExHQueryFSearch("keyword")
+total, results, err := EHentai.EHSearch("keyword")
+// total, results, err := EHentai.ExHSearch("keyword")
 if err != nil {
     panic(err)
 }
@@ -60,9 +81,9 @@ for _, result := range results {
 }
 
 // 分类搜索:
-EHentai.EHQueryFSearch("keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
+EHentai.EHSearch("keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
 // 直接合起来应该也行
-EHentai.EHQueryFSearch("keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
+EHentai.EHSearch("keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
 ```
 
 ### 搜索 E(x)Hentai, 并通过官方 API 获取画廊的详细信息
@@ -79,7 +100,37 @@ for _, result := range results {
 }
 ```
 
-### 下载画廊所有图片, 下载失败时会尝试 query nl
+### 以迭代器模式（后台顺序并发）下载画廊下所有图片, 下载失败时会自动尝试 query nl
+
+```go
+it, err := EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b")
+if err != nil {
+    panic(err)
+}
+for data, err := range it {
+    if err != nil {
+        break
+    }
+    fmt.Println(len(imgData))
+}
+```
+
+### 以迭代器模式（后台顺序并发）下载其中一或几页, 下载失败时会自动尝试 query nl
+
+```go
+it, err := EHentai.TestDownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
+if err != nil {
+    panic(err)
+}
+for data, err := range it {
+    if err != nil {
+        break
+    }
+    fmt.Println(len(imgData))
+}
+```
+
+### 下载画廊所有图片, 下载失败时会自动尝试 query nl
 
 ```go
 imgDatas, err := EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b")
@@ -91,7 +142,7 @@ for _, imgData := range imgDatas {
 }
 ```
 
-### 下载其中一或几页, 下载失败时会尝试 query nl
+### 下载其中一或几页, 下载失败时会自动尝试 query nl
 
 ```go
 imgDatas, err := EHentai.DownloadPages("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")

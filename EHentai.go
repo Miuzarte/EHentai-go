@@ -27,7 +27,7 @@ func SetSkipDomainCheck(b bool) {
 	skipDomainCheck = b
 }
 
-// SetThreads 设置下载线程数
+// SetThreads 设置下载并发数
 func SetThreads(n int) {
 	threads = n
 }
@@ -49,6 +49,7 @@ func SetRetryDepth(depth int) {
 	retryDepth = depth
 }
 
+// InitEhTagDB 初始化 EhTagTranslation 数据库
 func InitEhTagDB() error {
 	return database.Init()
 }
