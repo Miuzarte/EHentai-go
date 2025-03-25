@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	cookie          = &Cookie{}
-	skipDomainCheck = false // 跳过 exhentai 域名的 cookie 检查
-	threads         = 4     // 下载并发数
-	timeout         = time.Minute * 5
-	retryDepth      = 2 // 使用页备链重试次数
+	cookie      = &Cookie{}
+	domainCheck = false // 访问 exhentai 域名时的 cookie 检查
+	threads     = 4     // 下载并发数
+	timeout     = time.Minute * 5
+	retryDepth  = 2 // 使用页备链重试次数
 )
 
 func SetCookie(memberId, passHash, igneous, sk string) {
@@ -22,9 +22,9 @@ func SetCookie(memberId, passHash, igneous, sk string) {
 	cookie.Sk = sk
 }
 
-// 设置跳过 exhentai 域名的 cookie 检查
-func SetSkipDomainCheck(b bool) {
-	skipDomainCheck = b
+// 设置访问 exhentai 域名时的 cookie 检查
+func SetDomainCheck(b bool) {
+	domainCheck = b
 }
 
 // SetThreads 设置下载并发数

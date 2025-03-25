@@ -19,7 +19,7 @@ const (
 )
 
 func checkDomain(u ...string) error {
-	if skipDomainCheck {
+	if !domainCheck {
 		return nil
 	}
 	for _, u := range u {
