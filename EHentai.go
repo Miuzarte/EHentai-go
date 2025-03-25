@@ -95,7 +95,7 @@ func ExHSearchDetail(keyword string, categories ...Category) (total int, galleri
 	return total, resp.GMetadata, nil
 }
 
-func DownloadIter(job *dlJob) iter.Seq2[[]byte, error] {
+func downloadIter(job *dlJob) iter.Seq2[[]byte, error] {
 	return func(yield func([]byte, error) bool) {
 		defer job.cancel()
 
@@ -125,7 +125,7 @@ func DownlaodGalleryIter(galleryUrl string) (iter.Seq2[[]byte, error], error) {
 	job := new(dlJob)
 	job.init(pageUrls)
 	job.startBackground()
-	return DownloadIter(job), nil
+	return downloadIter(job), nil
 }
 
 // DownloadPagesIter 以迭代器模式下载画廊某页的图片, 下载失败时自动尝试备链
@@ -137,7 +137,7 @@ func DownloadPagesIter(pageUrls ...string) (iter.Seq2[[]byte, error], error) {
 	job := new(dlJob)
 	job.init(pageUrls)
 	job.startBackground()
-	return DownloadIter(job), nil
+	return downloadIter(job), nil
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
