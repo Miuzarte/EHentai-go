@@ -27,9 +27,14 @@ type dlJob struct {
 	pages  []*dlPage
 	ctx    context.Context
 	cancel context.CancelFunc
+	err    error
 }
 
 func (j *dlJob) init(pageUrls []string) {
+	if j.err != nil {
+		return // do nothing
+	}
+
 	j.ctx, j.cancel = context.WithCancel(context.Background())
 
 	if len(j.pages) > 0 {
@@ -45,6 +50,10 @@ func (j *dlJob) init(pageUrls []string) {
 }
 
 func (j *dlJob) startBackground() {
+	if j.err != nil {
+		return
+	}
+
 	for _, page := range j.pages {
 		page.err = make(chan error, 1)
 	}

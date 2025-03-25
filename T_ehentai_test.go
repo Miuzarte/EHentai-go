@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+const (
+	TEST_GALLERY_URL = "https://e-hentai.org/g/3138775/30b0285f9b/"
+	TEST_PAGE_URL_0  = "https://e-hentai.org/s/859299c9ef/3138775-7"
+	TEST_PAGE_URL_1  = "https://e-hentai.org/s/0b2127ea05/3138775-8"
+)
+
 func TestEhQueryFSearch(t *testing.T) {
 	// results, err := queryFSearch(EHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
 	// if err != nil {
@@ -24,21 +30,22 @@ func TestEhQueryFSearch(t *testing.T) {
 }
 
 func TestFetchGalleryPageUrls(t *testing.T) {
-	t.Log(FetchGalleryPageUrls("https://e-hentai.org/g/3138775/30b0285f9b/"))
+	t.Log(FetchGalleryPageUrls(TEST_GALLERY_URL))
 }
 
 func TestFetchGalleryImageUrls(t *testing.T) {
-	t.Log(FetchGalleryImageUrls("https://e-hentai.org/g/3138775/30b0285f9b/"))
+	t.Log(FetchGalleryImageUrls(TEST_GALLERY_URL))
 }
 
 func TestFetchPageImageUrl(t *testing.T) {
-	t.Log(FetchPageImageUrl("https://e-hentai.org/s/0b2127ea05/3138775-8"))
+	t.Log(FetchPageImageUrl(TEST_PAGE_URL_0))
+	t.Log(FetchPageImageUrl(TEST_PAGE_URL_1))
 }
 
 func TestDownloadPages(t *testing.T) {
 	ctx, cancel := TimeoutCtx()
 	defer cancel()
-	img, err := DownloadPages(ctx, "https://e-hentai.org/s/0b2127ea05/3138775-8")
+	img, err := DownloadPages(ctx, TEST_PAGE_URL_0, TEST_PAGE_URL_1)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -47,16 +54,12 @@ func TestDownloadPages(t *testing.T) {
 }
 
 func TestDownlaodGalleryIter(t *testing.T) {
-	it, err := DownlaodGalleryIter("https://e-hentai.org/g/3138775/30b0285f9b/")
-	if err != nil {
-		t.Fatal(err)
-	}
 	stop := false
 	go func() {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for data, err := range it {
+	for data, err := range DownlaodGalleryIter(TEST_GALLERY_URL) {
 		t.Log(len(data), err)
 		if stop {
 			break
@@ -65,16 +68,12 @@ func TestDownlaodGalleryIter(t *testing.T) {
 }
 
 func TestDownloadPagesIter(t *testing.T) {
-	it, err := DownloadPagesIter("https://e-hentai.org/s/0b2127ea05/3138775-8")
-	if err != nil {
-		t.Fatal(err)
-	}
 	stop := false
 	go func() {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for data, err := range it {
+	for data, err := range DownloadPagesIter(TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
 		t.Log(len(data), err)
 		if stop {
 			break
