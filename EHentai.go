@@ -95,13 +95,6 @@ func ExHSearchDetail(keyword string, categories ...Category) (total int, galleri
 	return total, resp.GMetadata, nil
 }
 
-type Downloading struct {
-	Total   int
-	Current int
-	Data    []byte
-	Err     error
-}
-
 func DownloadIter(job *dlJob) iter.Seq2[[]byte, error] {
 	return func(yield func([]byte, error) bool) {
 		defer job.cancel()
