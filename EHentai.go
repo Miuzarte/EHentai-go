@@ -118,7 +118,7 @@ func downloadIter(job *dlJob) iter.Seq2[[]byte, error] {
 
 // DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
 func DownlaodGalleryIter(galleryUrl string) iter.Seq2[[]byte, error] {
-	job := new(dlJob)
+	job := dlJob{}
 	err := checkDomain(galleryUrl)
 	if err != nil {
 		job.err = err
@@ -130,12 +130,12 @@ func DownlaodGalleryIter(galleryUrl string) iter.Seq2[[]byte, error] {
 
 	job.init(pageUrls)
 	job.startBackground()
-	return downloadIter(job)
+	return downloadIter(&job)
 }
 
 // DownloadPagesIter 以迭代器模式下载画廊某页的图片, 下载失败时自动尝试备链
 func DownloadPagesIter(pageUrls ...string) iter.Seq2[[]byte, error] {
-	job := new(dlJob)
+	job := dlJob{}
 	err := checkDomain(pageUrls...)
 	if err != nil {
 		job.err = err
@@ -143,7 +143,7 @@ func DownloadPagesIter(pageUrls ...string) iter.Seq2[[]byte, error] {
 
 	job.init(pageUrls)
 	job.startBackground()
-	return downloadIter(job)
+	return downloadIter(&job)
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链

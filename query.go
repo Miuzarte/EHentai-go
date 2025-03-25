@@ -300,7 +300,7 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		}
 	}
 
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	wg.Add(pages)
 	pageUrls = make([]string, total)
 	errs := make(chan error, pages)
@@ -442,7 +442,7 @@ func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, 
 		return nil, ErrNoPageUrls
 	}
 
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	wg.Add(len(pageUrls))
 	imgDatas = make([][]byte, len(pageUrls))
 	errs := make(chan error, len(pageUrls))
