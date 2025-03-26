@@ -50,7 +50,7 @@ func TestDownloadPages(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	t.Log(len(img[0]))
+	t.Log(len(img[0].Data))
 }
 
 func TestDownlaodGalleryIter(t *testing.T) {
@@ -59,8 +59,8 @@ func TestDownlaodGalleryIter(t *testing.T) {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for data, err := range DownlaodGalleryIter(TEST_GALLERY_URL) {
-		t.Log(len(data), err)
+	for page, err := range DownlaodGalleryIter(TEST_GALLERY_URL) {
+		t.Log(len(page.Data), err)
 		if stop {
 			break
 		}
@@ -73,8 +73,8 @@ func TestDownloadPagesIter(t *testing.T) {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for data, err := range DownloadPagesIter(TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
-		t.Log(len(data), err)
+	for page, err := range DownloadPagesIter(TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
+		t.Log(len(page.Data), err)
 		if stop {
 			break
 		}
@@ -97,10 +97,10 @@ func TestJpegPageDownload(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	data := datas[0]
-	if len(data) == 0 {
+	page := datas[0]
+	if len(page.Data) == 0 {
 		t.Error("empty data")
 		t.FailNow()
 	}
-	os.WriteFile("test.jpg", data, 0o644)
+	os.WriteFile("test.jpg", page.Data, 0o644)
 }

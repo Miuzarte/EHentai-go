@@ -57,11 +57,16 @@ type GalleryMetadataRequest struct {
 	Namespace int     `json:"namespace"`
 }
 
+// Gallery describes the gallery url
+//
 // https://e-hentai.org/g/{gallery_id}/{gallery_token}/
-type GIdList struct {
-	Id    int
-	Token string
+type Gallery struct {
+	GalleryId    int
+	GalleryToken string
 }
+
+// GIdList is the official alias of [Gallery]
+type GIdList = Gallery
 
 // PostGalleryMetadata returns metadata of the provided galleries
 func PostGalleryMetadata(g ...GIdList) (*GalleryMetadataResponse, error) {
@@ -74,7 +79,7 @@ func PostGalleryMetadata(g ...GIdList) (*GalleryMetadataResponse, error) {
 		Namespace: 1,
 	}
 	for _, gallery := range g {
-		reqBody.GIdList = append(reqBody.GIdList, []any{gallery.Id, gallery.Token})
+		reqBody.GIdList = append(reqBody.GIdList, []any{gallery.GalleryId, gallery.GalleryToken})
 	}
 	reqBytes, err := json.Marshal(reqBody)
 	if err != nil {
@@ -116,12 +121,17 @@ type GalleryTokenRequest struct {
 	PageList [][]any `json:"pagelist"`
 }
 
+// Page describes the page url
+//
 // https://e-hentai.org/s/{page_token}/{gallery_id}-{pagenumber}
-type PageList struct {
-	PToken string
-	GId    int
-	PIndex int
+type Page struct {
+	PageToken string
+	GalleryId int
+	PageNum   int
 }
+
+// PageList is the official alias of [Page]
+type PageList = Page
 
 // PostGalleryToken returns token of the provided pages
 func PostGalleryToken(p ...PageList) (*GalleryTokenResponse, error) {
@@ -133,7 +143,7 @@ func PostGalleryToken(p ...PageList) (*GalleryTokenResponse, error) {
 		Method: "gtoken",
 	}
 	for _, page := range p {
-		reqBody.PageList = append(reqBody.PageList, []any{page.GId, page.PToken, page.PIndex})
+		reqBody.PageList = append(reqBody.PageList, []any{page.GalleryId, page.PageToken, page.PageNum})
 	}
 	reqBytes, err := json.Marshal(reqBody)
 	if err != nil {

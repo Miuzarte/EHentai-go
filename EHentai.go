@@ -95,29 +95,14 @@ func ExHSearchDetail(keyword string, categories ...Category) (total int, galleri
 	return total, resp.GMetadata, nil
 }
 
-func downloadIter(job *dlJob) iter.Seq2[[]byte, error] {
-	return func(yield func([]byte, error) bool) {
-		defer job.cancel()
-
-		if job.err != nil {
-			yield(nil, job.err)
-			return
-		}
-		for _, page := range job.pages {
-			err, ok := <-page.err
-			if !ok { // 已下载, 下载方关闭了 err
-				continue
-			}
-
-			if !yield(page.data, err) {
-				return
-			}
-		}
-	}
+// PageData carrys page info and data
+type PageData struct {
+	Page
+	Data []byte
 }
 
 // DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
-func DownlaodGalleryIter(galleryUrl string) iter.Seq2[[]byte, error] {
+func DownlaodGalleryIter(galleryUrl string) iter.Seq2[PageData, error] {
 	job := dlJob{}
 	err := checkDomain(galleryUrl)
 	if err != nil {
@@ -130,11 +115,11 @@ func DownlaodGalleryIter(galleryUrl string) iter.Seq2[[]byte, error] {
 
 	job.init(pageUrls)
 	job.startBackground()
-	return downloadIter(&job)
+	return job.downloadIter()
 }
 
 // DownloadPagesIter 以迭代器模式下载画廊某页的图片, 下载失败时自动尝试备链
-func DownloadPagesIter(pageUrls ...string) iter.Seq2[[]byte, error] {
+func DownloadPagesIter(pageUrls ...string) iter.Seq2[PageData, error] {
 	job := dlJob{}
 	err := checkDomain(pageUrls...)
 	if err != nil {
@@ -143,11 +128,11 @@ func DownloadPagesIter(pageUrls ...string) iter.Seq2[[]byte, error] {
 
 	job.init(pageUrls)
 	job.startBackground()
-	return downloadIter(&job)
+	return job.downloadIter()
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
-func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas [][]byte, err error) {
+func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas []PageData, err error) {
 	err = checkDomain(galleryUrl)
 	if err != nil {
 		return nil, err
@@ -160,7 +145,7 @@ func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas [][]byte,
 }
 
 // DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
-func DownloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, err error) {
+func DownloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData, err error) {
 	err = checkDomain(pageUrls...)
 	if err != nil {
 		return nil, err

@@ -417,34 +417,36 @@ func downloadImage(ctx context.Context, imgUrl string) (imgData []byte, err erro
 }
 
 // downloadPage 下载画廊某页的图片, 下载失败时尝试备链
-func downloadPage(ctx context.Context, pageUrl string) (imgData []byte, err error) {
+func downloadPage(ctx context.Context, pageUrl string) (PageData, error) {
 	R := retryDepth
 retry:
 	imgUrl, bakPage, err := fetchPageImageUrl(pageUrl)
 	if err != nil {
-		return nil, err
+		return PageData{}, err
 	}
-	imgData, err = downloadImage(ctx, imgUrl)
+	// imgData, err = downloadImage(ctx, imgUrl)
+	data, err := downloadImage(ctx, imgUrl)
 	if err != nil {
 		if bakPage != "" {
 			pageUrl = bakPage
 			R--
 			goto retry
 		}
-		return nil, err
+		return PageData{}, err
 	}
-	return imgData, nil
+	_, pToken, gId, pNum := UrlGetPTokenGIdPNum(pageUrl)
+	return PageData{PageList{pToken, gId, pNum}, data}, nil
 }
 
 // downloadPages 并发下载画廊某页的图片, 下载失败时尝试备链
-func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, err error) {
+func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData, err error) {
 	if len(pageUrls) == 0 {
 		return nil, ErrNoPageUrls
 	}
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(pageUrls))
-	imgDatas = make([][]byte, len(pageUrls))
+	imgDatas = make([]PageData, len(pageUrls))
 	errs := make(chan error, len(pageUrls))
 
 	limiter := newLimiter(threads)
@@ -474,7 +476,7 @@ func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas [][]byte, 
 	}
 
 	for i := range imgDatas {
-		if len(imgDatas[i]) == 0 {
+		if len(imgDatas[i].Data) == 0 {
 			return nil, ErrFoundEmptyImageData
 		}
 	}

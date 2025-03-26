@@ -76,7 +76,7 @@ func UrlGetGIdGToken(u string) (domain Domain, gId int, gToken string) {
 	return "", 0, ""
 }
 
-func UrlGetPTokenGIdPIndex(u string) (domain Domain, pToken string, gId int, pIndex int) {
+func UrlGetPTokenGIdPNum(u string) (domain Domain, pToken string, gId int, pNum int) {
 	// https://e-hentai.org/s/{page_token}/{gallery_id}-{pagenumber}
 	// https://e-hentai.org/s/0b2127ea05/3138775-8
 	u = strings.TrimRight(u, "/")

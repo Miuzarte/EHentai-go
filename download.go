@@ -2,12 +2,13 @@ package EHentai
 
 import (
 	"context"
+	"iter"
 )
 
 type dlPage struct {
 	url  string
+	page PageData
 	err  chan error
-	data []byte
 }
 
 func (p *dlPage) download(ctx context.Context) error {
@@ -15,12 +16,12 @@ func (p *dlPage) download(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	p.data = data
+	p.page = data
 	return nil
 }
 
 func (p *dlPage) done() bool {
-	return len(p.data) != 0 // 未完成的一定为空
+	return len(p.page.Data) != 0 // 未完成的一定为空
 }
 
 type dlJob struct {
@@ -73,6 +74,28 @@ func (j *dlJob) startBackground() {
 			}(page)
 		}
 	}()
+}
+
+func (j *dlJob) downloadIter() iter.Seq2[PageData, error] {
+	return func(yield func(PageData, error) bool) {
+		defer j.cancel()
+
+		if j.err != nil {
+			yield(PageData{}, j.err)
+			return
+		}
+		for _, dlPage := range j.pages {
+			err, ok := <-dlPage.err
+			if !ok { // 已下载, 下载方关闭了 err
+				continue
+			}
+
+			_, pToken, gId, pNum := UrlGetPTokenGIdPNum(dlPage.url)
+			if !yield(PageData{PageList{pToken, gId, pNum}, dlPage.page.Data}, err) {
+				return
+			}
+		}
+	}
 }
 
 type limiter struct {
