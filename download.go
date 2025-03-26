@@ -32,11 +32,11 @@ type dlJob struct {
 }
 
 func (j *dlJob) init(pageUrls []string) {
+	j.ctx, j.cancel = context.WithCancel(context.Background())
+
 	if j.err != nil {
 		return // do nothing
 	}
-
-	j.ctx, j.cancel = context.WithCancel(context.Background())
 
 	if len(j.pages) > 0 {
 		return

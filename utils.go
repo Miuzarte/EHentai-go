@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	netUrl "net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -142,4 +143,37 @@ func httpGetDoc(ctx context.Context, url *netUrl.URL) (*goquery.Document, error)
 
 func sadPandaCheck(doc *goquery.Document) bool {
 	return doc.Find("head").Length() == 0 && doc.Find("body").Length() == 0
+}
+
+func removeDuplicates(indexes []int) []int {
+	seen := make(map[int]struct{})
+	result := []int{}
+	for _, index := range indexes {
+		if _, ok := seen[index]; !ok {
+			seen[index] = struct{}{}
+			result = append(result, index)
+		}
+	}
+	return result
+}
+
+func indexesCleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
+	if len(indexes) == 0 ||
+		slices.Max(indexes) < sLen && slices.Min(indexes) >= 0 {
+		return indexes
+	}
+	for _, i := range indexes {
+		if i < sLen && i >= 0 {
+			cleaned = append(cleaned, i)
+		}
+	}
+	return
+}
+
+func sliceRearrange[T any](s []T, indexes []int) (trimed []T) {
+	trimed = make([]T, 0, len(indexes))
+	for _, i := range indexes {
+		trimed = append(trimed, s[i])
+	}
+	return
 }
