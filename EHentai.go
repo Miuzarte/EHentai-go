@@ -4,7 +4,6 @@ import (
 	"context"
 	"iter"
 	"time"
-	"unsafe"
 )
 
 var (
@@ -73,7 +72,11 @@ func EHSearchDetail(keyword string, categories ...Category) (total int, gallerie
 	if err != nil {
 		return
 	}
-	list := *(*[]GIdList)(unsafe.Pointer(&results))
+	// list := *(*[]Gallery)(unsafe.Pointer(&results)) // boom
+	list := make([]Gallery, len(results))
+	for i := range results {
+		list[i] = Gallery{results[i].Gid, results[i].Token}
+	}
 	resp, err := PostGalleryMetadata(list...)
 	if err != nil {
 		return 0, nil, err
@@ -87,7 +90,10 @@ func ExHSearchDetail(keyword string, categories ...Category) (total int, galleri
 	if err != nil {
 		return
 	}
-	list := *(*[]GIdList)(unsafe.Pointer(&results))
+	list := make([]Gallery, len(results))
+	for i := range results {
+		list[i] = Gallery{results[i].Gid, results[i].Token}
+	}
 	resp, err := PostGalleryMetadata(list...)
 	if err != nil {
 		return 0, nil, err
