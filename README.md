@@ -25,13 +25,6 @@ if err != nil {
 
 开了就关不掉了, 要更新的话再调用一次
 
-### 设置跳过 exhentai 域名的 cookie 检查
-
-```go
-// 默认为 false
-EHentai.SetSkipDomainCheck(false)
-```
-
 ### 设置下载并发数
 
 ```go
@@ -51,6 +44,13 @@ EHentai.SetTimeout(time.Minute * 5)
 // 手动使用:
 ctx, cancel := EHentai.TimeoutCtx()
 defer cancel()
+```
+
+### 设置 exhentai 域名的 cookie 检查
+
+```go
+// 默认为 false
+EHentai.SetDomainCheck(false)
 ```
 
 ### 设置 query nl 的重试次数
@@ -103,12 +103,11 @@ for _, result := range results {
 ### 以迭代器模式（后台顺序并发）下载画廊下所有图片, 下载失败时会自动尝试 query nl
 
 ```go
-it, err := EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b")
-if err != nil {
-    panic(err)
-}
-for data, err := range it {
+for data, err := range EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b") {
     if err != nil {
+        // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出循环
+        // 如果是下载过程出错, 由外部决定是否继续下载
+        fmt.Println(err)
         break
     }
     fmt.Println(len(imgData))
@@ -118,12 +117,10 @@ for data, err := range it {
 ### 以迭代器模式（后台顺序并发）下载其中一或几页, 下载失败时会自动尝试 query nl
 
 ```go
-it, err := EHentai.TestDownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
-if err != nil {
-    panic(err)
-}
+it := EHentai.TestDownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
 for data, err := range it {
     if err != nil {
+        fmt.Println(err)
         break
     }
     fmt.Println(len(imgData))

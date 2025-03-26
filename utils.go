@@ -177,3 +177,12 @@ func sliceRearrange[T any](s []T, indexes []int) (trimed []T) {
 	}
 	return
 }
+
+func partsDownloadHelper(pageUrls *[]string, parts []int) {
+	if len(*pageUrls) == 0 {
+		return
+	}
+	parts = removeDuplicates(parts)                       // 去重
+	parts = indexesCleanOutOfRange(len(*pageUrls), parts) // 越界检查
+	*pageUrls = sliceRearrange(*pageUrls, parts)          // 重排
+}

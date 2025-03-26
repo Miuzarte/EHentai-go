@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	cookie      = &Cookie{}
+	cookie      = Cookie{}
 	domainCheck = false // 访问 exhentai 域名时的 cookie 检查
 	threads     = 4     // 下载并发数
 	timeout     = time.Minute * 5
@@ -122,9 +122,7 @@ func DownlaodGalleryIter(galleryUrl string, parts ...int) iter.Seq2[PageData, er
 	}
 
 	if len(parts) > 0 {
-		parts = removeDuplicates(parts)                      // 去重
-		parts = indexesCleanOutOfRange(len(pageUrls), parts) // 越界检查
-		pageUrls = sliceRearrange(pageUrls, parts)           // 重排
+		partsDownloadHelper(&pageUrls, parts)
 	}
 
 	job.init(pageUrls)
@@ -159,9 +157,7 @@ func DownloadGallery(ctx context.Context, galleryUrl string, parts ...int) (imgD
 	}
 
 	if len(parts) > 0 {
-		parts = removeDuplicates(parts)                      // 去重
-		parts = indexesCleanOutOfRange(len(pageUrls), parts) // 越界检查
-		pageUrls = sliceRearrange(pageUrls, parts)           // 重排
+		partsDownloadHelper(&pageUrls, parts)
 	}
 
 	return downloadPages(ctx, pageUrls...)
