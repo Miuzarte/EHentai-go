@@ -140,7 +140,9 @@ func DownloadPagesIter(pageUrls ...string) iter.Seq2[PageData, error] {
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
-func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas []PageData, err error) {
+//
+// 不传入 parts 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
+func DownloadGallery(ctx context.Context, galleryUrl string, parts ...int) (imgDatas []PageData, err error) {
 	err = checkDomain(galleryUrl)
 	if err != nil {
 		return nil, err
@@ -149,6 +151,13 @@ func DownloadGallery(ctx context.Context, galleryUrl string) (imgDatas []PageDat
 	if err != nil {
 		return nil, err
 	}
+
+	if len(parts) > 0 {
+		parts = removeDuplicates(parts)                      // 去重
+		parts = indexesCleanOutOfRange(len(pageUrls), parts) // 越界检查
+		pageUrls = sliceRearrange(pageUrls, parts)           // 重排
+	}
+
 	return downloadPages(ctx, pageUrls...)
 }
 
