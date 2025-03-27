@@ -52,13 +52,21 @@ func GetCache(gId string) *cacheGallery {
 //
 // domain 为空时使用 [EXHENTAI_DOMAIN]
 //
-// pageUrls 需要完整以保证读取失败时直接下载
+// pageUrls 需要完整以保证读取失败时直接下载, 不提供时尝试从缓存中读取
 func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cg *cacheGallery, err error) {
 	if domain == "" {
 		domain = EXHENTAI_DOMAIN
 	}
 	if gMeta.Error != "" {
 		return nil, wrapErr(ErrGalleryMetadataError, gMeta.Error)
+	}
+
+	if len(pageUrls) == 0 {
+		meta, ok := MetaCacheRead(gMeta.GId)
+		if !ok {
+			return nil, wrapErr(ErrNoPageProvided, nil)
+		}
+		pageUrls = meta.pageUrls
 	}
 
 	fileCount, _ := atoi(gMeta.FileCount)

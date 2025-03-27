@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+// TODO: 尝试合并逻辑
+
 type dlPage struct {
 	url  string
 	page PageData

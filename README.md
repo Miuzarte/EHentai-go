@@ -46,13 +46,6 @@ ctx, cancel := EHentai.TimeoutCtx()
 defer cancel()
 ```
 
-### 设置 exhentai 域名的 cookie 检查
-
-```go
-// 默认为 false
-EHentai.SetDomainCheck(false)
-```
-
 ### 设置 query nl 的重试次数
 
 ```go
@@ -66,6 +59,21 @@ EHentai.SetRetryDepth(2)
 <a href="#" id="loadfail" onclick="return nl('45453-483314')">Reload broken image</a>
 ```
 
+### 启用或禁用自动缓存
+
+```go
+// 启用或禁用画廊自动缓存 (WIP)
+// 下载画廊时: 自动缓存所有下载的页
+// 下载页时: 存在该画廊的缓存时, 自动缓存所下载的页
+EHentai.SetCacheEnabled(false)
+
+// 设置缓存目录
+EHentai.SetCacheDir("path/to/cache")
+
+// 启用或禁用元数据与页链接缓存, 降低调用官方 api 的频率
+EHentai.SetMetadataCacheEnabled(true)
+```
+
 ### 搜索 E(x)Hentai
 
 ```go
@@ -77,7 +85,7 @@ if err != nil {
 }
 fmt.Println("Total results:", total)
 for _, result := range results {
-    fmt.Printf("%+v", result)
+    fmt.Printf("%+v\n", result)
 }
 
 // 分类搜索:
@@ -96,65 +104,65 @@ if err != nil {
 }
 fmt.Println("Total results:", total)
 for _, result := range results {
-    fmt.Printf("%+v", result)
+    fmt.Printf("%+v\n", result)
 }
 ```
 
 ### 以迭代器模式（后台顺序并发）下载画廊下所有图片, 下载失败时会自动尝试 query nl
 
 ```go
-for data, err := range EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b") {
+for pageData, err := range EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b") {
     if err != nil {
         // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出循环
         // 如果是下载过程出错, 由外部决定是否继续下载
         fmt.Println(err)
         break
     }
-    fmt.Println(len(imgData))
+    fmt.Println(len(pageData.Data))
 }
 ```
 
 ### 以迭代器模式（后台顺序并发）下载其中一或几页, 下载失败时会自动尝试 query nl
 
 ```go
-it := EHentai.TestDownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
-for data, err := range it {
+it := EHentai.DownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
+for pageData, err := range it {
     if err != nil {
         fmt.Println(err)
         break
     }
-    fmt.Println(len(imgData))
+    fmt.Println(len(pageData.Data))
 }
 ```
 
 ### 下载画廊所有图片, 下载失败时会自动尝试 query nl
 
 ```go
-imgDatas, err := EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b")
+pages, err := EHentai.DownloadGallery(context.Background(), "https://e-hentai.org/g/3138775/30b0285f9b")
 if err != nil {
     panic(err)
 }
-for _, imgData := range imgDatas {
-    fmt.Println(len(imgData))
+for _, page := range pages {
+    fmt.Println(len(page.Data))
 }
 ```
 
 ### 下载其中一或几页, 下载失败时会自动尝试 query nl
 
 ```go
-imgDatas, err := EHentai.DownloadPages("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
+pages, err := EHentai.DownloadPages(context.Background(), "https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
 if err != nil {
     panic(err)
 }
-for _, imgData := range imgDatas {
-    fmt.Println(len(imgData))
+for _, page := range pages {
+    fmt.Println(len(page.Data))
 }
 ```
 
 ### 获取画廊的所有页链接
 
 ```go
-pageUrls, err := EHentai.FetchGalleryPageUrls("galleryUrl")
+pageUrls, err := EHentai.FetchGalleryPageUrls("https://e-hentai.org/g/3138775/30b0285f9b")
 if err != nil {
     panic(err)
 }
@@ -163,42 +171,41 @@ for _, pageUrl := range pageUrls {
 }
 ```
 
-### 获取画廊所有图片直链与备链
+### 创建缓存
 
 ```go
-imgUrls, bakPages, err := EHentai.FetchGalleryImageUrls("galleryUrl")
+resp, err := EHentai.PostGalleryMetadata(EHentai.GIdList{3138775, "30b0285f9b"})
 if err != nil {
     panic(err)
 }
-for i := range imgUrls {
-    fmt.Println(imgUrls[i])
-    fmt.Println(bakPages[i])
-}
-```
 
-### 获取某页的图片直链与备链
-
-```go
-imgUrl, bakPage, err := EHentai.FetchPageImageUrl("pageUrl")
+pages, err := EHentai.DownloadGallery(context.Background(), "https://e-hentai.org/g/3138775/30b0285f9b")
 if err != nil {
     panic(err)
 }
-fmt.Println(imgUrl)
-fmt.Println(bakPage)
-```
 
-大概逻辑：直链下载失败时, `EHentai.FetchPageImageUrl(bakPage)` 重新获取直链尝试
-
-### 直链下载
-
-```go
-imgDatas, err := EHentai.DownloadImages(imgUrls...)
+// 默认情况下 pageUrls 已经在缓存里了, 传 nil 即可
+cache, err := EHentai.CreateCache(EHentai.EHENTAI_DOMAIN, galleryMetadata, nil)
 if err != nil {
     panic(err)
 }
-for _, imgData := range imgDatas {
-    fmt.Println(len(imgData))
+
+n, err := cache.Write(pages...)
+if err != nil {
+    panic(err)
 }
+
+fmt.Printf("%d pages written\n", n)
 ```
 
-不建议使用, `EHentai.DownloadPages()` 会自动使用备链重试
+### 读取缓存
+
+```go
+pageNums := []int{7, 8}
+cache := EHentai.GetCache("3138775")
+if cache != nil {
+    for _, page := range cache.ReadIter(pageNums...) {
+        fmt.Println(len(page.Data))
+    }
+}
+```
