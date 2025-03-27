@@ -2,41 +2,14 @@ package EHentai
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	netUrl "net/url"
+	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
-
-type Domain = string
-
-const (
-	EHENTAI_DOMAIN  Domain = "e-hentai.org"
-	EXHENTAI_DOMAIN Domain = "exhentai.org"
-)
-
-func checkDomain(u ...string) error {
-	if !domainCheck {
-		return nil
-	}
-	for _, u := range u {
-		domain := urlGetDomain(u)
-		switch domain {
-		case EHENTAI_DOMAIN:
-		case EXHENTAI_DOMAIN:
-			if !cookie.Ok() {
-				return ErrCookieNotSet
-			}
-		default:
-			return errors.New("invalid url")
-		}
-	}
-	return nil
-}
 
 func urlGetDomain(u string) Domain {
 	switch {
@@ -48,7 +21,7 @@ func urlGetDomain(u string) Domain {
 	return ""
 }
 
-func UrlGetGIdGToken(u string) (domain Domain, gId int, gToken string) {
+func UrlGetGIdGToken(u string) (domain Domain, gId string, gToken string) {
 	// https://e-hentai.org/g/{gallery_id}/{gallery_token}
 	// https://e-hentai.org/g/3138775/30b0285f9b
 	u = strings.TrimRight(u, "/")
@@ -61,23 +34,19 @@ func UrlGetGIdGToken(u string) (domain Domain, gId int, gToken string) {
 			if len(splits) < i+3 {
 				break
 			}
-			gId, err := strconv.Atoi(splits[i+1])
-			if err != nil {
-				break
-			}
-			switch splits[i-1] {
-			case EHENTAI_DOMAIN:
-				return splits[i-1], gId, splits[i+2]
-			case EXHENTAI_DOMAIN:
-				return splits[i-1], gId, splits[i+2]
-			}
-			break
+			return splits[i-1], splits[i+1], splits[i+2]
 		}
 	}
-	return "", 0, ""
+	return "", "", ""
 }
 
-func UrlGetPTokenGIdPNum(u string) (domain Domain, pToken string, gId int, pNum int) {
+func UrlToGallery(u string) Gallery {
+	_, gId, gToken := UrlGetGIdGToken(u)
+	gid, _ := atoi(gId)
+	return Gallery{GalleryId: gid, GalleryToken: gToken}
+}
+
+func UrlGetPTokenGIdPNum(u string) (domain Domain, pToken string, gId string, pNum string) {
 	// https://e-hentai.org/s/{page_token}/{gallery_id}-{pagenumber}
 	// https://e-hentai.org/s/0b2127ea05/3138775-8
 	u = strings.TrimRight(u, "/")
@@ -94,24 +63,26 @@ func UrlGetPTokenGIdPNum(u string) (domain Domain, pToken string, gId int, pNum 
 			if len(tail) < 2 {
 				break
 			}
-			gId, err := strconv.Atoi(tail[0])
-			if err != nil {
-				break
-			}
-			pIndex, err := strconv.Atoi(tail[1])
-			if err != nil {
-				break
-			}
-			switch splits[i-1] {
-			case EHENTAI_DOMAIN:
-				return splits[i-1], splits[i+1], gId, pIndex
-			case EXHENTAI_DOMAIN:
-				return splits[i-1], splits[i+1], gId, pIndex
-			}
-			break
+			return splits[i-1], splits[i+1], tail[0], tail[1]
 		}
 	}
-	return "", "", 0, 0
+	return "", "", "", ""
+}
+
+func UrlToPage(u string) Page {
+	_, pToken, gId, pNum := UrlGetPTokenGIdPNum(u)
+	gid, _ := atoi(gId)
+	pageNum, _ := atoi(pNum)
+	return Page{PageToken: pToken, GalleryId: gid, PageNum: pageNum}
+}
+
+func pageUrlsToGalleryId(pageUrls []string) set[string] {
+	gIds := make(set[string])
+	for _, u := range pageUrls {
+		_, gId, _ := UrlGetGIdGToken(u)
+		gIds[gId] = struct{}{}
+	}
+	return gIds
 }
 
 func httpGet(ctx context.Context, url *netUrl.URL) (*http.Response, error) {
@@ -136,7 +107,7 @@ func httpGetDoc(ctx context.Context, url *netUrl.URL) (*goquery.Document, error)
 		return nil, err
 	}
 	if sadPandaCheck(doc) {
-		return nil, ErrSadPanda
+		return nil, wrapErr(ErrSadPanda, nil)
 	}
 	return doc, nil
 }
@@ -157,11 +128,12 @@ func removeDuplicates(indexes []int) []int {
 	return result
 }
 
-func indexesCleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
+func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	if len(indexes) == 0 ||
 		slices.Max(indexes) < sLen && slices.Min(indexes) >= 0 {
 		return indexes
 	}
+	cleaned = make([]int, 0, len(indexes))
 	for _, i := range indexes {
 		if i < sLen && i >= 0 {
 			cleaned = append(cleaned, i)
@@ -170,7 +142,7 @@ func indexesCleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	return
 }
 
-func sliceRearrange[T any](s []T, indexes []int) (trimed []T) {
+func rearrange[T any](s []T, indexes []int) (trimed []T) {
 	trimed = make([]T, 0, len(indexes))
 	for _, i := range indexes {
 		trimed = append(trimed, s[i])
@@ -178,11 +150,45 @@ func sliceRearrange[T any](s []T, indexes []int) (trimed []T) {
 	return
 }
 
-func partsDownloadHelper(pageUrls *[]string, parts []int) {
-	if len(*pageUrls) == 0 {
-		return
+type set[T comparable] map[T]struct{}
+
+func removeDuplication[T comparable](s []T) []T {
+	if len(s) == 0 {
+		return s
 	}
-	parts = removeDuplicates(parts)                       // 去重
-	parts = indexesCleanOutOfRange(len(*pageUrls), parts) // 越界检查
-	*pageUrls = sliceRearrange(*pageUrls, parts)          // 重排
+
+	m := make(set[T], len(s))
+	d := make([]T, 0, len(s))
+	for i := range s {
+		if _, ok := m[s[i]]; ok {
+			continue
+		}
+		m[s[i]] = struct{}{}
+		d = append(d, s[i])
+	}
+	return d
+}
+
+// dirLookupExt 查找目录下的文件，返回指定扩展名的文件列表
+func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
+	extsMap := make(set[string])
+	for _, ext := range exts {
+		extsMap[strings.ToLower(ext)] = struct{}{}
+	}
+
+	des := []os.DirEntry{}
+	for _, de := range dirEnts {
+		if de.IsDir() {
+			continue
+		}
+		parts := strings.Split(de.Name(), ".")
+		if len(parts) < 2 {
+			continue
+		}
+		ext := strings.ToLower(parts[len(parts)-1])
+		if _, ok := extsMap[ext]; ok {
+			des = append(des, de)
+		}
+	}
+	return des
 }

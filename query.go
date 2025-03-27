@@ -1,9 +1,7 @@
 package EHentai
 
 import (
-	"context"
 	"errors"
-	"io"
 	netUrl "net/url"
 	"regexp"
 	"slices"
@@ -77,7 +75,7 @@ func (c Category) Format() string {
 }
 
 var (
-	ErrCookieNotSet        = errors.New("cookie not set")
+	// ErrCookieNotSet = errors.New("cookie not set")
 	ErrSadPanda            = errors.New("sad panda")
 	ErrNoHitsFound         = errors.New("no hits found")
 	ErrNoMatch             = errors.New("no match")
@@ -93,6 +91,7 @@ var (
 	ErrFoundEmptyImageData = errors.New("found empty image data")
 	ErrInvalidContentType  = errors.New("invalid content type")
 	ErrNoPageUrls          = errors.New("no page urls")
+	ErrNoImageUrls         = errors.New("no image urls")
 )
 
 type Cookie struct {
@@ -117,26 +116,29 @@ func (c *Cookie) Ok() bool {
 	return c.IpbMemberId != "" && c.IpbPassHash != "" && c.Igneous != "" // sk 可以为空
 }
 
-type EhFSearchResult struct {
-	Domain Domain
-	Gid    int
-	Token  string
-	Cat    string
-	Cover  string
-	Rating string
-	Url    string
-	Tags   []string
-	Title  string // 根据 cookie 中的 sk, 结果可能为英文或日文
-	Pages  string
-}
-
 // Found about 192,819 results.
 // Found 2 results.
 // Found 1 result.
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
+func searchDetail(url, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
+	total, results, err := querySearch(url, keyword, categories...)
+	if err != nil {
+		return
+	}
+	list := make([]Gallery, len(results))
+	for i := range results {
+		list[i] = Gallery{results[i].Gid, results[i].Token}
+	}
+	resp, err := PostGalleryMetadata(list...)
+	if err != nil {
+		return 0, nil, err
+	}
+	return total, resp.GMetadata, nil
+}
+
 // total != len(results) 即不止一页
-func querySearch(url, keyword string, categories ...Category) (total int, results []EhFSearchResult, err error) {
+func querySearch(url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err
@@ -164,29 +166,29 @@ func querySearch(url, keyword string, categories ...Category) (total int, result
 	// body > div.ido > div:nth-child(2) > p
 	noHitsFound := doc.Find("body > div.ido > div:nth-child(2) > p").Text()
 	if noHitsFound != "" {
-		return 0, nil, ErrNoHitsFound
+		return 0, nil, wrapErr(ErrNoHitsFound, noHitsFound)
 	}
 	// body > div.ido > div:nth-child(2) > div.searchtext > p
 	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
 	matches := foundReg.FindStringSubmatch(foundResults)
 	if len(matches) == 0 {
-		return 0, nil, ErrNoMatch
+		return 0, nil, wrapErr(ErrNoMatch, foundResults)
 	}
 	if matches[1] == "" {
-		return 0, nil, ErrEmptyMatch
+		return 0, nil, wrapErr(ErrEmptyMatch, foundResults)
 	}
-	total, _ = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
+	total, _ = atoi(strings.ReplaceAll(matches[1], ",", ""))
 	if total == 0 {
-		return 0, nil, ErrNoResult
+		return 0, nil, wrapErr(ErrNoResult, foundResults)
 	}
 
 	// body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(*)
 	table := doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
 	tableLen := table.Length()
 	if tableLen == 0 {
-		return 0, nil, ErrEmptyTable
+		return 0, nil, wrapErr(ErrEmptyTable, foundResults)
 	}
-	results = make([]EhFSearchResult, 0, tableLen-1)
+	results = make([]FSearchResult, 0, tableLen-1)
 	table.Each(func(i int, s *goquery.Selection) {
 		if i == 0 { // 表头
 			return
@@ -213,8 +215,8 @@ func querySearch(url, keyword string, categories ...Category) (total int, result
 		title := s.Find("td.gl3c.glname > a > div.glink").Text()
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
-		if gId != 0 && gToken != "" {
-			results = append(results, EhFSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, tags, title, pages})
+		if gId, _ := atoi(gId); gId != 0 && gToken != "" {
+			results = append(results, FSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, tags, title, pages})
 		}
 	})
 	return
@@ -238,11 +240,11 @@ func parseStars(stars string) (rating string) {
 	if len(matches) == 0 {
 		return ""
 	}
-	x, err := strconv.Atoi(matches[1])
+	x, err := atoi(matches[1])
 	if err != nil {
 		return ""
 	}
-	y, err := strconv.Atoi(matches[2])
+	y, err := atoi(matches[2])
 	if err != nil {
 		return ""
 	}
@@ -253,7 +255,7 @@ func parseStars(stars string) (rating string) {
 		decimal = 5
 	}
 	units -= (-x / 16)
-	return strconv.Itoa(units) + "." + strconv.Itoa(decimal)
+	return itoa(units) + "." + itoa(decimal)
 }
 
 // Showing 1 - 20 of 65 images
@@ -263,6 +265,14 @@ var numReg = regexp.MustCompile(`Showing 1 - (\d+) of (\d+) images?`)
 
 // fetchGalleryPages 遍历获取所有页链接
 func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
+	defer func() {
+		if err == nil {
+			// 缓存页链接
+			g := UrlToGallery(galleryUrl)
+			metaCacheWrite(g.GalleryId, nil, pageUrls)
+		}
+	}()
+
 	u, err := netUrl.Parse(galleryUrl)
 	if err != nil {
 		return nil, err
@@ -276,23 +286,24 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 
 	// body > div:nth-child(*) > p
 	// <p class="gpc">Showing 1 - 5 of 5 images</p>
-	matches := numReg.FindStringSubmatch(doc.Find(".gpc").Text())
+	numImages := doc.Find(".gpc").Text()
+	matches := numReg.FindStringSubmatch(numImages)
 	if len(matches) == 0 {
-		return nil, ErrNoMatch
+		return nil, wrapErr(ErrNoMatch, numImages)
 	}
 	if matches[1] == "" || matches[2] == "" {
-		return nil, ErrEmptyMatch
+		return nil, wrapErr(ErrEmptyMatch, numImages)
 	}
-	end, _ := strconv.Atoi(matches[1])
-	total, _ := strconv.Atoi(matches[2])
+	end, _ := atoi(matches[1])
+	total, _ := atoi(matches[2])
 	if end == 0 || total == 0 {
-		return nil, ErrNoImage
+		return nil, wrapErr(ErrNoImage, numImages)
 	}
 	pages := 0
 	if end == total {
 		pages = 1
 	} else if end > total {
-		return nil, ErrEndGreaterThanTotal
+		return nil, wrapErr(ErrEndGreaterThanTotal, numImages)
 	} else {
 		pages = total / end
 		if total%end != 0 {
@@ -300,14 +311,18 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		}
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(pages)
 	pageUrls = make([]string, total)
 	errs := make(chan error, pages)
 
+	wg := sync.WaitGroup{}
+	wg.Add(pages)
+
+	limiter := newLimiter()
+	defer limiter.close()
+
 	ctx, cancel = TimeoutCtx()
 	defer cancel()
-	limiter := newLimiter(threads)
+
 	for page := range pages {
 		limiter.acquire()
 		go func(page int) {
@@ -320,7 +335,7 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 			if page == 0 { // 起始页不需要重新加载
 				pageDoc = doc
 			} else {
-				u.RawQuery = "p=" + strconv.Itoa(page)
+				u.RawQuery = "p=" + itoa(page)
 				pageDoc, err = httpGetDoc(ctx, u)
 				if err != nil {
 					errs <- err
@@ -345,8 +360,8 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 		}
 	}
 
-	if slices.Contains(pageUrls, "") {
-		return nil, ErrFoundEmptyPageUrl
+	if index := slices.Index(pageUrls, ""); index >= 0 {
+		return nil, wrapErr(ErrFoundEmptyPageUrl, index)
 	}
 
 	return pageUrls, nil
@@ -389,97 +404,4 @@ func nl(url, onclick string) string {
 		u.RawQuery = "nl=" + nl
 	}
 	return u.String()
-}
-
-// downloadImage 从图片直链下载
-func downloadImage(ctx context.Context, imgUrl string) (imgData []byte, err error) {
-	u, err := netUrl.Parse(imgUrl)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := httpGet(ctx, u)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	// image/webp, image/jpeg
-	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "image") {
-		return nil, ErrInvalidContentType
-	}
-	imgData, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if len(imgData) == 0 {
-		return nil, ErrEmptyBody
-	}
-	return
-}
-
-// downloadPage 下载画廊某页的图片, 下载失败时尝试备链
-func downloadPage(ctx context.Context, pageUrl string) (PageData, error) {
-	R := retryDepth
-retry:
-	imgUrl, bakPage, err := fetchPageImageUrl(pageUrl)
-	if err != nil {
-		return PageData{}, err
-	}
-	// imgData, err = downloadImage(ctx, imgUrl)
-	data, err := downloadImage(ctx, imgUrl)
-	if err != nil {
-		if bakPage != "" {
-			pageUrl = bakPage
-			R--
-			goto retry
-		}
-		return PageData{}, err
-	}
-	_, pToken, gId, pNum := UrlGetPTokenGIdPNum(pageUrl)
-	return PageData{PageList{pToken, gId, pNum}, data}, nil
-}
-
-// downloadPages 并发下载画廊某页的图片, 下载失败时尝试备链
-func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData, err error) {
-	if len(pageUrls) == 0 {
-		return nil, ErrNoPageUrls
-	}
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(pageUrls))
-	imgDatas = make([]PageData, len(pageUrls))
-	errs := make(chan error, len(pageUrls))
-
-	limiter := newLimiter(threads)
-	for i, url := range pageUrls {
-		limiter.acquire()
-		go func(i int) {
-			defer func() {
-				limiter.release()
-				wg.Done()
-			}()
-
-			data, err := downloadPage(ctx, url)
-			imgDatas[i] = data
-			errs <- err
-		}(i)
-	}
-
-	go func() {
-		wg.Wait()
-		close(errs)
-	}()
-
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := range imgDatas {
-		if len(imgDatas[i].Data) == 0 {
-			return nil, ErrFoundEmptyImageData
-		}
-	}
-
-	return imgDatas, nil
 }

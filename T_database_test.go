@@ -7,8 +7,7 @@ import (
 func TestDatabaseInit(t *testing.T) {
 	err := database.Init()
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Log(database.Info())
 	t.Log(database["rows"])

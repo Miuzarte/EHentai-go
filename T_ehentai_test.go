@@ -15,16 +15,14 @@ const (
 func TestEhQueryFSearch(t *testing.T) {
 	// results, err := queryFSearch(EHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
 	// if err != nil {
-	// 	t.Error(err)
-	// 	t.FailNow()
+	// 	t.Fatal(err)
 	// }
 	// t.Logf("%+v", results)
 
 	SetCookie("", "", "", "")
 	_, results, err := querySearch(EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Logf("%+v", results)
 }
@@ -34,12 +32,24 @@ func TestFetchGalleryPageUrls(t *testing.T) {
 }
 
 func TestFetchGalleryImageUrls(t *testing.T) {
-	t.Log(FetchGalleryImageUrls(TEST_GALLERY_URL))
+	_, pageUrls, err := initDownloadGalleryUrl(TEST_GALLERY_URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pageUrl := range pageUrls {
+		imgUrl, bak, err := fetchPageImageUrl(pageUrl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(imgUrl)
+		t.Log(bak)
+		println()
+	}
 }
 
 func TestFetchPageImageUrl(t *testing.T) {
-	t.Log(FetchPageImageUrl(TEST_PAGE_URL_0))
-	t.Log(FetchPageImageUrl(TEST_PAGE_URL_1))
+	t.Log(fetchPageImageUrl(TEST_PAGE_URL_0))
+	t.Log(fetchPageImageUrl(TEST_PAGE_URL_1))
 }
 
 func TestDownloadPages(t *testing.T) {
@@ -47,8 +57,7 @@ func TestDownloadPages(t *testing.T) {
 	defer cancel()
 	img, err := DownloadPages(ctx, TEST_PAGE_URL_0, TEST_PAGE_URL_1)
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Log(len(img[0].Data))
 }
@@ -59,7 +68,7 @@ func TestDownlaodGalleryIter(t *testing.T) {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for page, err := range DownlaodGalleryIter(TEST_GALLERY_URL) {
+	for page, err := range DownloadGalleryIter(TEST_GALLERY_URL) {
 		t.Log(len(page.Data), err)
 		if stop {
 			break
@@ -94,13 +103,18 @@ func TestJpegPageDownload(t *testing.T) {
 	SetCookie("", "", "", "")
 	datas, err := downloadPages(ctx, "https://exhentai.org/s/76360befe8/3222212-1")
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	page := datas[0]
 	if len(page.Data) == 0 {
-		t.Error("empty data")
-		t.FailNow()
+		t.Fatal("empty data")
 	}
 	os.WriteFile("test.jpg", page.Data, 0o644)
+}
+
+func TestCache(t *testing.T) {
+	// download [TEST_PAGE_URL_0] (write cache)
+	// read cache
+	// download [TEST_PAGE_URL_0], [TEST_PAGE_URL_1] (write cache)
+	// read cache
 }

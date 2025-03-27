@@ -5,8 +5,7 @@ import "testing"
 func TestPostGalleryMetadata(t *testing.T) {
 	resp, err := PostGalleryMetadata(GIdList{3138775, "30b0285f9b"})
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Logf("%+v", *resp)
 }
@@ -14,8 +13,7 @@ func TestPostGalleryMetadata(t *testing.T) {
 func TestPostGalleryToken(t *testing.T) {
 	resp, err := PostGalleryToken(PageList{"0b2127ea05", 3138775, 8})
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Logf("%+v", *resp)
 }
@@ -28,8 +26,7 @@ func TestPostGalleryMetadataExhResults(t *testing.T) {
 		GIdList{3121784, "92adae3fa6"}, // from exhentai but still works
 	)
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 	t.Logf("%+v", *resp)
 }
