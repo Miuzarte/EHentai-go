@@ -33,7 +33,7 @@ func TestFetchGalleryPageUrls(t *testing.T) {
 }
 
 func TestFetchGalleryImageUrls(t *testing.T) {
-	_, pageUrls, err := initDownloadGalleryUrl(t.Context(), TEST_GALLERY_URL)
+	pageUrls, _, err := initDownloadGalleryUrl(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +92,12 @@ func TestDownloadPagesIter(t *testing.T) {
 
 func TestBakPageDownload(t *testing.T) {
 	// https://e-hentai.org/s/b7a3ead2d6/3138775-24
-	downloadPages(t.Context(), "https://e-hentai.org/s/b7a3ead2d6/3138775-24")
+	downloadPages(t.Context(), nil, "https://e-hentai.org/s/b7a3ead2d6/3138775-24")
 }
 
 func TestJpegPageDownload(t *testing.T) {
 	SetCookie("", "", "", "")
-	datas, err := downloadPages(t.Context(), "https://exhentai.org/s/76360befe8/3222212-1")
+	datas, err := downloadPages(t.Context(), nil, "https://exhentai.org/s/76360befe8/3222212-1")
 	if err != nil {
 		t.Fatal(err)
 	}

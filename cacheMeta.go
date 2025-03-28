@@ -18,9 +18,9 @@ var (
 // MetaCacheRead 从缓存中读取画廊元数据与页链接
 //
 // gallery 与 pageUrls 不一定同时存在
-func MetaCacheRead(gId int) (*metaCache, bool) {
+func MetaCacheRead(gId int) *metaCache {
 	if !metadataCacheEnabled {
-		return nil, false
+		return nil
 	}
 
 	defer func() {
@@ -68,7 +68,7 @@ func metaCacheWrite(gId int, g *GalleryMetadata, pageUrls []string) {
 		nextCleanTime = nextCleanTime.Add(time.Minute * 10)
 	}()
 
-	if mc, ok := gMetaCache.get(gId); ok {
+	if mc := gMetaCache.get(gId); mc != nil {
 		// 已存在 直接更新
 		if g != nil {
 			mc.gallery = g
@@ -119,17 +119,17 @@ func newRamCache[K comparable, T any, PT *T](timeout time.Duration) ramCache[K, 
 	}
 }
 
-func (rc *ramCache[K, T, PT]) get(k K) (PT, bool) {
+func (rc *ramCache[K, T, PT]) get(k K) PT {
 	rc.RLock()
 	defer rc.RUnlock()
 	if v, ok := rc.m[k]; ok {
 		if time.Since(v.t) < rc.timeout {
-			return v.v, true
+			return v.v
 		} else {
 			delete(rc.m, k)
 		}
 	}
-	return nil, false
+	return nil
 }
 
 func (rc *ramCache[K, T, PT]) set(k K, v PT) {

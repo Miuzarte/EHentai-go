@@ -44,7 +44,7 @@ func SetMetadataCacheEnabled(b bool) {
 	metadataCacheEnabled = b
 }
 
-// SetCacheEnabled 设置自动缓存启用状态
+// SetAutoCacheEnabled 设置自动缓存启用状态
 //
 // 默认为 false
 //
@@ -53,16 +53,21 @@ func SetMetadataCacheEnabled(b bool) {
 // 下载画廊时: 自动缓存所有下载的页
 //
 // 下载页时: 存在该画廊的缓存时, 自动缓存所下载的页
-func SetCacheEnabled(b bool) {
+func SetAutoCacheEnabled(b bool) {
 	autoCacheEnabled = b
 	if b {
 		metadataCacheEnabled = true
 	}
 }
 
-// SetCacheDir 设置缓存目录
+// SetCacheDir 设置缓存文件夹路径
 //
-// 路径形如 "3138775/metadata", "3138775/1.webp", "3138775/2.webp"
+// 留空默认为 "./EHentaiCache/"
+//
+// 路径形如 "EHentaiCache/3138775/metadata"
+// , "EHentaiCache/3138775/1.webp"
+// , "EHentaiCache/3138775/2.webp"
+// ...
 func SetCacheDir(dir string) {
 	if dir == "" {
 		dir = DEFAULT_CACHE_DIR
@@ -120,15 +125,23 @@ func DownloadCovers(ctx context.Context, results ...coverProvider) ([]Image, err
 // 不传入 pageNums 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
 func DownloadGalleryIter(ctx context.Context, galleryUrl string, pageNums ...int) iter.Seq2[PageData, error] {
 	var pageUrls []string
+	var availableCache map[int]*cacheGallery
 	var err error
 	g := UrlToGallery(galleryUrl)
-	mCache, ok := MetaCacheRead(g.GalleryId)
-	if ok && len(mCache.pageUrls) != 0 {
+	mCache := MetaCacheRead(g.GalleryId)
+	if mCache != nil && len(mCache.pageUrls) != 0 {
 		pageUrls = mCache.pageUrls
 	} else {
-		pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
+		pageUrls, availableCache, err = initDownloadGalleryUrl(ctx, galleryUrl, pageNums...)
 	}
+
 	pageUrls = partsDownloadHelper(pageUrls, pageNums)
+
+	if autoCacheEnabled && len(availableCache) == 0 {
+		// 创建缓存
+		cache, _ := CreateCacheFromUrl(galleryUrl)
+		_ = cache // 已经生成了文件, 后续在构造下载示例时再重新获取
+	}
 
 	job := newDownloader(ctx, newPageDownload(pageUrls))
 	job.firstYieldErr = err
@@ -147,16 +160,20 @@ func DownloadPagesIter(ctx context.Context, pageUrls ...string) iter.Seq2[PageDa
 //
 // 不传入 pageNums 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
 func DownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) ([]PageData, error) {
-	_, pageUrls, err := initDownloadGalleryUrl(ctx, galleryUrl, pageNums...)
+	pageUrls, availableCache, err := initDownloadGalleryUrl(ctx, galleryUrl, pageNums...)
 	if err != nil {
 		return nil, err
 	}
-	return downloadPages(ctx, pageUrls...)
+	return downloadPages(ctx, availableCache, pageUrls...)
 }
 
 // DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
 func DownloadPages(ctx context.Context, pageUrls ...string) ([]PageData, error) {
-	return downloadPages(ctx, pageUrls...)
+	availableCache, err := initDownloadPageUrls(pageUrls...)
+	if err != nil {
+		return nil, err
+	}
+	return downloadPages(ctx, availableCache, pageUrls...)
 }
 
 // FetchGalleryPageUrls 获取画廊下所有页链接

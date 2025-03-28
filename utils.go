@@ -116,16 +116,21 @@ func sadPandaCheck(doc *goquery.Document) bool {
 	return doc.Find("head").Length() == 0 && doc.Find("body").Length() == 0
 }
 
-func removeDuplicates(indexes []int) []int {
-	seen := make(map[int]struct{})
-	result := []int{}
-	for _, index := range indexes {
-		if _, ok := seen[index]; !ok {
-			seen[index] = struct{}{}
-			result = append(result, index)
-		}
+func removeDuplication[T comparable](s []T) []T {
+	if len(s) == 0 {
+		return s
 	}
-	return result
+
+	m := make(set[T], len(s))
+	d := make([]T, 0, len(s))
+	for i := range s {
+		if _, ok := m[s[i]]; ok {
+			continue
+		}
+		m[s[i]] = struct{}{}
+		d = append(d, s[i])
+	}
+	return d
 }
 
 func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
@@ -150,25 +155,6 @@ func rearrange[T any](s []T, indexes []int) (trimed []T) {
 	return
 }
 
-type set[T comparable] map[T]struct{}
-
-func removeDuplication[T comparable](s []T) []T {
-	if len(s) == 0 {
-		return s
-	}
-
-	m := make(set[T], len(s))
-	d := make([]T, 0, len(s))
-	for i := range s {
-		if _, ok := m[s[i]]; ok {
-			continue
-		}
-		m[s[i]] = struct{}{}
-		d = append(d, s[i])
-	}
-	return d
-}
-
 // dirLookupExt 查找目录下的文件，返回指定扩展名的文件列表
 func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
 	extsMap := make(set[string])
@@ -191,4 +177,13 @@ func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
 		}
 	}
 	return des
+}
+
+// 为了避免在索引缓存元数据时遇到的越界问题, 元数据中以 map[string]string 储存页链接
+func pageUrlsToSlice(pageUrls map[string]string) []string {
+	s := make([]string, 0, len(pageUrls))
+	for i := range len(pageUrls) {
+		s = append(s, pageUrls[itoa(i)])
+	}
+	return s
 }

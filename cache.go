@@ -1,6 +1,7 @@
 package EHentai
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,19 +20,20 @@ const (
 )
 
 var (
-	ErrMismatchPageUrls     = errors.New("mismatch page urls")
-	ErrGalleryMetadataError = errors.New("gallery metadata error")
-	ErrEmptyCache           = errors.New("empty cache")
-	ErrEmptyData            = errors.New("empty data")
-	ErrInvalidCacheMetadata = errors.New("invalid cache metadata")
-	ErrInvalidPageNum       = errors.New("invalid page number")
-	ErrUnknownImageType     = errors.New("unknown image type")
-	ErrPageNotCached        = errors.New("page not cached")
+	ErrFailedToGetGalleryMetadata = errors.New("failed to get gallery metadata")
+	ErrMismatchPageUrls           = errors.New("mismatch page urls")
+	ErrGalleryMetadataError       = errors.New("gallery metadata error")
+	ErrEmptyCache                 = errors.New("empty cache")
+	ErrEmptyData                  = errors.New("empty data")
+	ErrInvalidCacheMetadata       = errors.New("invalid cache metadata")
+	ErrInvalidPageNum             = errors.New("invalid page number")
+	ErrUnknownImageType           = errors.New("unknown image type")
+	ErrPageNotCached              = errors.New("page not cached")
 )
 
 // GetCache 获取画廊缓存
-func GetCache(gId string) *cacheGallery {
-	metaPath := filepath.Join(cacheDir, gId, METADATA_FILE_NAME)
+func GetCache(gId int) *cacheGallery {
+	metaPath := filepath.Join(cacheDir, itoa(gId), METADATA_FILE_NAME)
 	f, err := os.OpenFile(metaPath, os.O_RDONLY, 0o644)
 	if err != nil {
 		return nil
@@ -48,12 +50,50 @@ func GetCache(gId string) *cacheGallery {
 	return &cacheGallery{meta: meta}
 }
 
+// CreateCacheFromUrl 从画廊 url 覆盖创建缓存
+func CreateCacheFromUrl(gUrl string) (cache *cacheGallery, err error) {
+	domain := urlGetDomain(gUrl)
+	gu := UrlToGallery(gUrl)
+
+	var gallery *GalleryMetadata
+	var pageUrls []string
+
+	// 获取画廊元数据与页链接 尝试缓存
+	gMeta := MetaCacheRead(gu.GalleryId)
+	if gMeta != nil {
+		gallery = gMeta.gallery
+		pageUrls = gMeta.pageUrls
+	}
+
+	if gallery == nil {
+		resp, err := PostGalleryMetadata(gu)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.GMetadata) == 0 {
+			return nil, wrapErr(ErrFailedToGetGalleryMetadata, nil)
+		}
+		if resp.GMetadata[0].Error != "" {
+			return nil, wrapErr(ErrGalleryMetadataError, resp.GMetadata[0].Error)
+		}
+		gallery = &resp.GMetadata[0]
+	}
+	if len(pageUrls) == 0 {
+		pageUrls, err = fetchGalleryPages(context.Background(), gUrl)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return CreateCache(domain, gallery, pageUrls)
+}
+
 // CreateCache 覆盖创建画廊缓存元数据
 //
 // domain 为空时使用 [EXHENTAI_DOMAIN]
 //
 // pageUrls 需要完整以保证读取失败时直接下载, 不提供时尝试从缓存中读取
-func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cg *cacheGallery, err error) {
+func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cache *cacheGallery, err error) {
 	if domain == "" {
 		domain = EXHENTAI_DOMAIN
 	}
@@ -62,9 +102,9 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cg *
 	}
 
 	if len(pageUrls) == 0 {
-		meta, ok := MetaCacheRead(gMeta.GId)
-		if !ok {
-			return nil, wrapErr(ErrNoPageProvided, nil)
+		meta := MetaCacheRead(gMeta.GId)
+		if meta == nil {
+			return nil, wrapErr(ErrNoPageUrlProvided, nil)
 		}
 		pageUrls = meta.pageUrls
 	}
@@ -83,7 +123,11 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cg *
 	cgm.Url = "https://" + domain + "/g/" + gId + "/" + gMeta.Token
 	cgm.Gallery = *gMeta
 
-	cgm.Pages = pageUrls
+	// cgm.PageUrls = pageUrls
+	cgm.PageUrls = make(map[string]string, len(pageUrls))
+	for i, pageUrl := range pageUrls {
+		cgm.PageUrls[itoa(i+1)] = pageUrl
+	}
 
 	cgm.Files.Dir = gDir
 	cgm.Files.Count = 0
@@ -96,17 +140,43 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cg *
 		}
 	}()
 
-	cg = &cacheGallery{meta: cgm}
-	err = cg.mkdir()
+	cache = &cacheGallery{meta: cgm}
+	err = cache.mkdir()
 	if err != nil {
 		return nil, err
 	}
-	err = cg.updateMetadata()
+	err = cache.updateMetadata()
 	if err != nil {
 		return nil, err
 	}
 
-	return cg, err
+	return cache, err
+}
+
+func DeleteCache(gId int) (err error) {
+	cg := GetCache(gId)
+	if cg == nil {
+		return nil
+	}
+
+	// 删除所有缓存的页
+	cg.DeletePages(nil)
+
+	// 删除元数据文件
+	err = os.Remove(filepath.Join(cg.meta.Files.Dir, METADATA_FILE_NAME))
+	if err != nil {
+		return err
+	}
+
+	// 删除缓存目录
+	// 非空时无法删除
+	// 不使用 [os.RemoveAll]
+	err = os.Remove(cg.meta.Files.Dir)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // cacheGallery 画廊缓存实例
@@ -173,7 +243,8 @@ func (cg *cacheGallery) updateMetadata() error {
 
 // Write 将画廊图片写入缓存
 func (cg *cacheGallery) Write(pages ...PageData) (n int, err error) {
-	n = 0 // 写入数
+	defer cg.updateMetadata() // 更新元数据
+
 	for _, page := range pages {
 		if page.PageNum <= 0 {
 			return n, wrapErr(ErrInvalidPageNum, page.PageNum)
@@ -182,27 +253,26 @@ func (cg *cacheGallery) Write(pages ...PageData) (n int, err error) {
 			return n, wrapErr(ErrEmptyData, page.PageNum)
 		}
 
-		err := os.WriteFile(
-			filepath.Join(cg.meta.Files.Dir, itoa(page.Page.PageNum)+"."+page.Type.String()),
-			page.Data, 0o644,
-		)
+		pageInfo := CachePageInfo{page.Page.PageNum, int(page.Type), len(page.Data)}
+
+		err := os.WriteFile(cg.getPagePath(pageInfo), page.Data, 0o644)
 		if err != nil {
 			return n, err
 		}
 
 		cg.metaMu.Lock()
-		cg.meta.Files.Pages = append(cg.meta.Files.Pages, CachePageInfo{page.Page.PageNum, int(page.Type), len(page.Data)})
+		cg.meta.Files.Pages.append(pageInfo)
+		cg.meta.Files.Count = len(cg.meta.Files.Pages)
 		cg.metaMu.Unlock()
 
 		n++
 	}
 
-	cg.updateMetadata() // 更新元数据
 	return n, nil
 }
 
 // match 匹配缓存页信息
-func (cg *cacheGallery) match(pageInfo *CachePageInfo, page *PageData) error {
+func (cg *cacheGallery) match(pageInfo CachePageInfo, page PageData) error {
 	// 画廊与页码
 	if page.GalleryId != cg.meta.Gallery.GId || page.PageNum != pageInfo.Num {
 		return wrapErr(ErrInvalidCacheMetadata, nil)
@@ -222,43 +292,53 @@ func (cg *cacheGallery) match(pageInfo *CachePageInfo, page *PageData) error {
 	return nil
 }
 
-func (cg *cacheGallery) getPagePath(pageInfo *CachePageInfo) string {
+func (cg *cacheGallery) getPagePath(pageInfo CachePageInfo) string {
 	return filepath.Join(cg.meta.Files.Dir, itoa(pageInfo.Num)+"."+ImageType(pageInfo.Type).String())
 }
 
-// ReadIter 以迭代器模式读取缓存
-func (cg *cacheGallery) ReadIter(pageNums ...int) iter.Seq2[PageData, error] {
-	return func(yield func(PageData, error) bool) {
-		if cg.meta.Files.Count == 0 { // 无缓存
-			yield(PageData{}, ErrEmptyCache)
-			return
-		}
+func (cg *cacheGallery) readOne(pageInfo CachePageInfo) (pageData PageData, err error) {
+	pageData = PageData{Page: UrlToPage(cg.meta.PageUrls[itoa(pageInfo.Num)])} // 根据页码获取 pageUrl
 
+	if cg.meta.Files.Count == 0 {
+		return pageData, wrapErr(ErrEmptyCache, nil)
+	}
+
+	err = cg.match(pageInfo, pageData)
+	if err != nil {
+		return
+	}
+
+	path := cg.getPagePath(pageInfo)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = wrapErr(ErrPageNotCached, pageData.PageNum)
+		}
+		return
+	}
+	pageData.Image = Image{Data: data, Type: ImageType(pageInfo.Type)}
+
+	return pageData, nil
+}
+
+// ReadOne 读取缓存
+//
+// 指定的 pageNum 未缓存时返回 [ErrPageNotCached]
+func (cg *cacheGallery) ReadOne(pageNum int) (page PageData, err error) {
+	pageInfo := cg.meta.Files.Pages.Get(pageNum)
+	return cg.readOne(pageInfo)
+}
+
+// ReadIter 以迭代器模式读取缓存
+//
+// 不提供 pageNums 时读取所有已缓存的页
+func (cg *cacheGallery) ReadIter(pageNums []int) iter.Seq2[PageData, error] {
+	return func(yield func(PageData, error) bool) {
 		// 从元数据中获取页信息
 		pageInfos := cg.meta.Files.Pages.Lookup(pageNums)
 
 		for _, pageInfo := range pageInfos {
-			page := PageData{Page: UrlToPage(cg.meta.Pages[pageInfo.Num])}
-			// 匹配缓存页信息
-			err := cg.match(&pageInfo, &page)
-			if err != nil {
-				if yield(page, err) {
-					continue
-				}
-				return
-			}
-
-			path := cg.getPagePath(&pageInfo)
-			data, err := os.ReadFile(path)
-			if err != nil {
-				if yield(page, err) {
-					continue
-				}
-				return
-			}
-			page.Image = Image{Data: data, Type: ImageType(pageInfo.Type)}
-
-			if !yield(page, nil) {
+			if !yield(cg.readOne(pageInfo)) {
 				return
 			}
 		}
@@ -266,28 +346,84 @@ func (cg *cacheGallery) ReadIter(pageNums ...int) iter.Seq2[PageData, error] {
 }
 
 // Read 读取缓存
-func (cg *cacheGallery) Read(pageNums ...int) ([]PageData, error) {
+//
+// 不提供 pageNums 时读取所有已缓存的页
+//
+// pageNums 中遇到未缓存的页时返回 [ErrPageNotCached]
+func (cg *cacheGallery) Read(pageNums []int) ([]PageData, error) {
 	pageDatas := make([]PageData, 0, len(pageNums))
 
 	pageInfos := cg.meta.Files.Pages.Lookup(pageNums)
 	for _, pageInfo := range pageInfos {
-		page := PageData{Page: UrlToPage(cg.meta.Pages[pageInfo.Num])}
-		err := cg.match(&pageInfo, &page)
+		page, err := cg.readOne(pageInfo)
 		if err != nil {
 			return nil, err
 		}
-
-		path := cg.getPagePath(&pageInfo)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		page.Image = Image{Data: data, Type: ImageType(pageInfo.Type)}
-
 		pageDatas = append(pageDatas, page)
 	}
 
 	return pageDatas, nil
+}
+
+// ReadByPageUrl 通过 pageUrl 读取缓存
+func (cg *cacheGallery) ReadByPageUrl(url string) (pageData PageData, err error) {
+	pu := UrlToPage(url)
+	pageInfo := cg.meta.Files.Pages.Get(pu.PageNum)
+	return cg.readOne(pageInfo)
+}
+
+// ReadByPageUrl 通过 pageUrls 读取缓存
+//
+// pageUrls 不可为空
+//
+// 为了方便起见
+// , len(pageDatas) == len(pageUrls) 且顺序一致
+// , 是否命中缓存只需检查 len(pageDatas[i].Image.Data)
+func (cg *cacheGallery) ReadByPageUrls(pageUrls []string) (pageDatas []PageData) {
+	if len(pageUrls) == 0 {
+		return nil
+	}
+
+	// 获取页码
+	pageNums := make([]int, len(pageUrls))
+	for i := range pageUrls {
+		pageNums[i] = UrlToPage(pageUrls[i]).PageNum
+	}
+
+	// 查缓存
+	pageInfos := cg.meta.Files.Pages.Lookup(pageNums)
+	pageDatas = make([]PageData, len(pageUrls))
+	for i := range pageInfos {
+		if pageInfos[i].Len == 0 {
+			continue
+		}
+		pageDatas[i], _ = cg.readOne(pageInfos[i])
+	}
+
+	return
+}
+
+// DeletePages 删除缓存的页
+//
+// 不提供 pageNums 时删除所有已缓存的页
+func (cg *cacheGallery) DeletePages(pageNums []int) (n int) {
+	defer cg.updateMetadata() // 更新元数据
+
+	pageInfos := cg.meta.Files.Pages.Lookup(pageNums)
+
+	for _, pageInfo := range pageInfos {
+		err := os.Remove(cg.getPagePath(pageInfo))
+		if err == nil {
+			n++ // 记录删除成功的数量
+		}
+
+		cg.metaMu.Lock()
+		cg.meta.Files.Pages.del(pageInfo.Num)
+		cg.meta.Files.Count = len(cg.meta.Files.Pages)
+		cg.metaMu.Unlock()
+	}
+
+	return n
 }
 
 func (cg *cacheGallery) State() CacheState {
@@ -302,6 +438,6 @@ func (cg *cacheGallery) State() CacheState {
 	case total == have:
 		return CACHE_STATE_FULL
 	default:
-		return -1
+		return CACHE_STATE_UNKNOWN
 	}
 }

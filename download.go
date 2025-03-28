@@ -2,6 +2,7 @@ package EHentai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -12,12 +13,21 @@ import (
 
 var ErrDownloadUnreachableCase = fmt.Errorf("download: unreachable case")
 
+var (
+	ErrNoPageUrlProvided   = errors.New("no page url provided")
+	ErrNoImageUrlProvided  = errors.New("no image url provided")
+	ErrInvalidContentType  = errors.New("invalid content type")
+	ErrEmptyBody           = errors.New("empty body")
+	ErrFoundEmptyImageData = errors.New("found empty image data")
+)
+
 // 之后不会扩展, 不使用接口
 type download struct {
-	url  string
-	page *PageData
-	img  *Image
-	err  chan error
+	url          string
+	cacheToWrite *cacheGallery // 存在时往里写
+	page         *PageData
+	img          *Image
+	err          chan error
 }
 
 func (dl *download) done() bool {
@@ -42,6 +52,10 @@ func (dl *download) start(ctx context.Context) {
 		page, err = downloadPage(ctx, dl.url)
 		if err == nil {
 			dl.page = &page
+			// 写缓存
+			if autoCacheEnabled && dl.cacheToWrite != nil {
+				go dl.cacheToWrite.Write(page)
+			}
 		}
 	case dl.img != nil:
 		var img Image
@@ -56,15 +70,19 @@ func (dl *download) start(ctx context.Context) {
 }
 
 func newPageDownload(urls []string) (dls []*download) {
+	// 获取可写的画廊缓存
+	caches, _ := initDownloadPageUrls(urls...)
 	dls = make([]*download, len(urls))
-	for _, url := range urls {
-		dls = append(dls, &download{
-			url: url,
+	for i := range urls {
+		pu := UrlToPage(urls[i])
+		dls[i] = &download{
+			url:          urls[i],
+			cacheToWrite: caches[pu.GalleryId],
 			page: &PageData{
-				Page: UrlToPage(url),
+				Page: pu,
 			},
 			err: make(chan error, 1),
-		})
+		}
 	}
 	return dls
 }
@@ -167,46 +185,54 @@ func partsDownloadHelper(pageUrls []string, pageNums []int) []string {
 	if len(pageNums) == 0 || len(pageUrls) == 0 {
 		return pageUrls
 	}
-	pageNums = removeDuplicates(pageNums)               // 去重
+	pageNums = removeDuplication(pageNums)              // 去重
 	pageNums = cleanOutOfRange(len(pageUrls), pageNums) // 越界检查
 	return rearrange(pageUrls, pageNums)                // 按页码重排 url
 }
 
 // initDownloadGalleryUrl
+// 获取画廊的所有页链接
+// , 根据设置尝试从元数据缓存或本地画廊缓存中获取
+//
+// 同时返回可用的本地缓存
 //
 // 只有一个 gallery, len(cgs) 不会大于 1
-func initDownloadGalleryUrl(ctx context.Context, galleryUrl string, pageNums ...int) (cgs map[string]*cacheGallery, pageUrls []string, err error) {
-	defer func() { pageUrls = partsDownloadHelper(pageUrls, pageNums) }()
+func initDownloadGalleryUrl(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, aCache map[int]*cacheGallery, err error) {
+	gId := UrlToGallery(galleryUrl).GalleryId
 
-	gId := itoa(UrlToGallery(galleryUrl).GalleryId)
-	cg := GetCache(gId)
-	if cg != nil && len(cg.meta.Pages) != 0 { // 尝试获取缓存中的 pageUrls
-		pageUrls = cg.meta.Pages
-		cgs = make(map[string]*cacheGallery, 1)
-		cgs[gId] = cg
-		return
+	if cg := GetCache(gId); cg != nil {
+		pageUrls = pageUrlsToSlice(cg.meta.PageUrls)
+		aCache = make(map[int]*cacheGallery, 1)
+		aCache[gId] = cg
+
+	} else if mc := MetaCacheRead(gId); mc != nil && len(mc.pageUrls) != 0 {
+		pageUrls = mc.pageUrls
+	} else {
+		pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
-	pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
-	if err != nil {
-		return nil, nil, err
-	}
+	pageUrls = partsDownloadHelper(pageUrls, pageNums)
 
 	return
 }
 
-func initDownloadPageUrls(pageUrls ...string) (cgs map[string]*cacheGallery, err error) {
+// initDownloadPageUrls 返回可用的本地缓存
+func initDownloadPageUrls(pageUrls ...string) (cgs map[int]*cacheGallery, err error) {
 	if len(pageUrls) == 0 {
-		return nil, wrapErr(ErrNoPageProvided, nil)
+		return nil, wrapErr(ErrNoPageUrlProvided, nil)
 	}
 
-	s := make(set[string])
+	// 去重收集画廊 ID
+	s := make(set[int])
 	for _, pageUrl := range pageUrls {
-		_, _, gId, _ := UrlGetPTokenGIdPNum(pageUrl)
+		gId := UrlToPage(pageUrl).GalleryId
 		s[gId] = struct{}{}
 	}
 
-	cgs = make(map[string]*cacheGallery, len(s))
+	cgs = make(map[int]*cacheGallery, len(s))
 	for gId := range s {
 		cg := GetCache(gId)
 		if cg != nil {
@@ -214,31 +240,6 @@ func initDownloadPageUrls(pageUrls ...string) (cgs map[string]*cacheGallery, err
 		}
 	}
 	return
-}
-
-type limiter struct {
-	sem chan struct{}
-	cl  sync.Once
-}
-
-func newLimiter() *limiter {
-	return &limiter{
-		sem: make(chan struct{}, threads),
-	}
-}
-
-func (l *limiter) acquire() {
-	l.sem <- struct{}{}
-}
-
-func (l *limiter) release() {
-	<-l.sem
-}
-
-func (l *limiter) close() {
-	l.cl.Do(func() {
-		close(l.sem)
-	})
 }
 
 // downloadImage 从图片直链下载
@@ -276,7 +277,7 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 // downloadImages 并发从图片直链下载
 func downloadImages(ctx context.Context, imgUrls ...string) (imgs []Image, err error) {
 	if len(imgUrls) == 0 {
-		return nil, wrapErr(ErrNoPageUrls, nil)
+		return nil, wrapErr(ErrNoImageUrlProvided, nil)
 	}
 
 	imgs = make([]Image, len(imgUrls))
@@ -322,14 +323,16 @@ func downloadImages(ctx context.Context, imgUrls ...string) (imgs []Image, err e
 	return imgs, nil
 }
 
-// downloadPage 下载画廊某页的图片, 下载失败时尝试备链
-func downloadPage(ctx context.Context, pageUrl string) (PageData, error) {
+// downloadPage 下载画廊某页的图片
+// , 下载失败时尝试备链
+func downloadPage(ctx context.Context, pageUrl string) (page PageData, err error) {
+	page = PageData{Page: UrlToPage(pageUrl)}
 	trys := 0
 retry:
 	trys++
 	imgUrl, bakPage, err := fetchPageImageUrl(ctx, pageUrl)
 	if err != nil {
-		return PageData{}, err
+		return page, err
 	}
 	img, err := downloadImage(ctx, imgUrl)
 	if err != nil {
@@ -339,18 +342,21 @@ retry:
 				goto retry
 			}
 		}
-		return PageData{}, err
+		return page, err
 	}
-	return PageData{Page: UrlToPage(pageUrl), Image: img}, nil
+	page.Image = img
+	return page, nil
 }
 
-// downloadPages 并发下载画廊某页的图片, 下载失败时尝试备链
-func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData, err error) {
+// downloadPages 并发下载画廊某页的图片
+// , 下载失败时尝试备链
+// , 根据设置尝试从缓存获取
+func downloadPages(ctx context.Context, aCache map[int]*cacheGallery, pageUrls ...string) (pageDatas []PageData, err error) {
 	if len(pageUrls) == 0 {
-		return nil, wrapErr(ErrNoPageUrls, nil)
+		return nil, wrapErr(ErrNoPageUrlProvided, nil)
 	}
 
-	imgDatas = make([]PageData, len(pageUrls))
+	pageDatas = make([]PageData, len(pageUrls))
 	errs := make(chan error, len(pageUrls))
 
 	wg := sync.WaitGroup{}
@@ -360,6 +366,21 @@ func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData
 	defer limiter.close()
 
 	for i, url := range pageUrls {
+		// try cache
+		if autoCacheEnabled || len(aCache) != 0 {
+			cache, ok := aCache[UrlToPage(url).GalleryId]
+			if ok {
+				pageData, err := cache.ReadByPageUrl(url)
+				if err != nil {
+					return nil, err
+				}
+				pageDatas[i] = pageData
+				wg.Done()
+				continue
+			}
+		}
+
+		// download
 		limiter.acquire()
 		go func(i int) {
 			defer func() {
@@ -368,7 +389,7 @@ func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData
 			}()
 
 			data, err := downloadPage(ctx, url)
-			imgDatas[i] = data
+			pageDatas[i] = data
 			errs <- err
 		}(i)
 	}
@@ -384,11 +405,36 @@ func downloadPages(ctx context.Context, pageUrls ...string) (imgDatas []PageData
 		}
 	}
 
-	for i := range imgDatas {
-		if len(imgDatas[i].Data) == 0 {
+	for i := range pageDatas {
+		if len(pageDatas[i].Data) == 0 {
 			return nil, wrapErr(ErrFoundEmptyImageData, pageUrls[i])
 		}
 	}
 
-	return imgDatas, nil
+	return pageDatas, nil
+}
+
+type limiter struct {
+	sem  chan struct{}
+	once sync.Once
+}
+
+func newLimiter() *limiter {
+	return &limiter{
+		sem: make(chan struct{}, threads),
+	}
+}
+
+func (l *limiter) acquire() {
+	l.sem <- struct{}{}
+}
+
+func (l *limiter) release() {
+	<-l.sem
+}
+
+func (l *limiter) close() {
+	l.once.Do(func() {
+		close(l.sem)
+	})
 }

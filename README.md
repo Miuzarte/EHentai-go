@@ -16,34 +16,21 @@ EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 ### 初始化 [EhTagTranslation](github.com/EhTagTranslation/Database) 数据库
 
 ```go
+tStart := time.Now()
 // 在 AMD Ryzen 5600x(6c12t) 上, 解析数据大概耗时 4ms
+// 开了就关不掉了, 要更新的话再调用一次
 err := EHentai.InitEhTagDB()
 if err != nil {
     panic(err)
 }
+fmt.Printf("InitEhTagDB took %s\n", time.Since(tStart))
 ```
-
-开了就关不掉了, 要更新的话再调用一次
 
 ### 设置下载并发数
 
 ```go
-// 默认为 4, 不建议超过 16
+// 默认为 4
 EHentai.SetThreads(4)
-```
-
-### 设置超时时间
-
-```go
-// 默认为 time.Minute * 5
-EHentai.SetTimeout(time.Minute * 5)
-
-// 除了部分带 ctx 参数的导出函数
-// , 该超时上下文会用于内部的所有请求
-
-// 手动使用:
-ctx, cancel := EHentai.TimeoutCtx()
-defer cancel()
 ```
 
 ### 设置 query nl 的重试次数
@@ -59,110 +46,109 @@ EHentai.SetRetryDepth(2)
 <a href="#" id="loadfail" onclick="return nl('45453-483314')">Reload broken image</a>
 ```
 
-### 启用或禁用自动缓存
+### 设置缓存
 
 ```go
-// 启用或禁用画廊自动缓存 (WIP)
+// 设置元数据缓存启用状态
+// 默认为 true
+// 以避免频繁请求官方 api
+EHentai.SetMetadataCacheEnabled(true)
+
+// 设置自动缓存启用状态
+// 默认为 false
+// 启用时会同时启用元数据缓存
 // 下载画廊时: 自动缓存所有下载的页
 // 下载页时: 存在该画廊的缓存时, 自动缓存所下载的页
-EHentai.SetCacheEnabled(false)
+EHentai.SetAutoCacheEnabled(false)
 
-// 设置缓存目录
+// 设置缓存文件夹路径
+// 留空默认为 "./EHentaiCache/"
+// 路径形如 "EHentaiCache/3138775/metadata"
+// , "EHentaiCache/3138775/1.webp"
+// , "EHentaiCache/3138775/2.webp"
+// ...
 EHentai.SetCacheDir("path/to/cache")
-
-// 启用或禁用元数据与页链接缓存, 降低调用官方 api 的频率
-EHentai.SetMetadataCacheEnabled(true)
 ```
 
 ### 搜索 E(x)Hentai
 
 ```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
 // 没做翻页, results 可能比 total 要少
-total, results, err := EHentai.EHSearch("keyword")
-// total, results, err := EHentai.ExHSearch("keyword")
+total, results, err := EHentai.EHSearch(ctx, "keyword")
+// total, results, err := EHentai.ExHSearch(ctx, "keyword")
 if err != nil {
     panic(err)
 }
-fmt.Println("Total results:", total)
+fmt.Printf("Total results: %d\n", total)
 for _, result := range results {
-    fmt.Printf("%+v\n", result)
+    fmt.Println(result.Title)
 }
 
-// 分类搜索:
-EHentai.EHSearch("keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
-// 直接合起来应该也行
-EHentai.EHSearch("keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
+// 也可以分类搜索
+EHentai.EHSearch(ctx, "keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
+// EHentai.EHSearch(ctx, "keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
+
+// 搜索同时通过官方 api 获取详细信息
+EHentai.EHSearchDetail(ctx, "keyword")
+// ExHSearchDetail(ctx, "keyword")
 ```
 
-### 搜索 E(x)Hentai, 并通过官方 API 获取画廊的详细信息
+### 下载画廊 / 下载页
 
 ```go
-total, results, err := EHentai.EHSearchDetail("keyword")
-// total, results, err := EHentai.ExHSearchDetail("keyword")
-if err != nil {
-    panic(err)
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+gUrl := "https://e-hentai.org/g/3138775/30b0285f9b"
+pageUrls := []string{
+    "https://e-hentai.org/s/859299c9ef/3138775-7",
+    "https://e-hentai.org/s/0b2127ea05/3138775-8",
 }
-fmt.Println("Total results:", total)
-for _, result := range results {
-    fmt.Printf("%+v\n", result)
-}
-```
 
-### 以迭代器模式（后台顺序并发）下载画廊下所有图片, 下载失败时会自动尝试 query nl
+// 两种下载方式都是一样的根据线程数并发下载
 
-```go
-for pageData, err := range EHentai.DownloadGallery("https://e-hentai.org/g/3138775/30b0285f9b") {
-    if err != nil {
-        // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出循环
-        // 如果是下载过程出错, 由外部决定是否继续下载
-        fmt.Println(err)
-        break
-    }
-    fmt.Println(len(pageData.Data))
-}
-```
-
-### 以迭代器模式（后台顺序并发）下载其中一或几页, 下载失败时会自动尝试 query nl
-
-```go
-it := EHentai.DownloadPagesIter("https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
-for pageData, err := range it {
+// 以迭代器模式:
+// 下载整个画廊
+for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
     if err != nil {
         fmt.Println(err)
+        // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出
+        // 如果是下载过程出错, 可以由外部决定是否取消下载
         break
+        // continue
     }
-    fmt.Println(len(pageData.Data))
+    fmt.Println(pageData.String())
 }
+// 下载画廊中的指定页
+for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
+    _ = pageData
+    _ = err
+}
+// 下载画廊页
+for pageData, err := range EHentai.DownloadPagesIter(ctx, pageUrls...) {
+    _ = pageData
+    _ = err
+}
+
+// 下载全部一起返回:
+pageDatas, err := EHentai.DownloadGallery(ctx, gUrl)
+_ = pageDatas
+_ = err
+_, _ = EHentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
+_, _ = EHentai.DownloadPages(ctx, pageUrls...)
 ```
 
-### 下载画廊所有图片, 下载失败时会自动尝试 query nl
+### 获取画廊下所有页链接
 
 ```go
-pages, err := EHentai.DownloadGallery(context.Background(), "https://e-hentai.org/g/3138775/30b0285f9b")
-if err != nil {
-    panic(err)
-}
-for _, page := range pages {
-    fmt.Println(len(page.Data))
-}
-```
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-### 下载其中一或几页, 下载失败时会自动尝试 query nl
-
-```go
-pages, err := EHentai.DownloadPages(context.Background(), "https://e-hentai.org/s/859299c9ef/3138775-7", "https://e-hentai.org/s/0b2127ea05/3138775-8")
-if err != nil {
-    panic(err)
-}
-for _, page := range pages {
-    fmt.Println(len(page.Data))
-}
-```
-
-### 获取画廊的所有页链接
-
-```go
-pageUrls, err := EHentai.FetchGalleryPageUrls("https://e-hentai.org/g/3138775/30b0285f9b")
+gUrl := "https://e-hentai.org/g/3138775/30b0285f9b"
+pageUrls, err := EHentai.FetchGalleryPageUrls(ctx, gUrl)
 if err != nil {
     panic(err)
 }
@@ -171,41 +157,6 @@ for _, pageUrl := range pageUrls {
 }
 ```
 
-### 创建缓存
+### 自行管理缓存
 
-```go
-resp, err := EHentai.PostGalleryMetadata(EHentai.GIdList{3138775, "30b0285f9b"})
-if err != nil {
-    panic(err)
-}
-
-pages, err := EHentai.DownloadGallery(context.Background(), "https://e-hentai.org/g/3138775/30b0285f9b")
-if err != nil {
-    panic(err)
-}
-
-// 默认情况下 pageUrls 已经在缓存里了, 传 nil 即可
-cache, err := EHentai.CreateCache(EHentai.EHENTAI_DOMAIN, galleryMetadata, nil)
-if err != nil {
-    panic(err)
-}
-
-n, err := cache.Write(pages...)
-if err != nil {
-    panic(err)
-}
-
-fmt.Printf("%d pages written\n", n)
-```
-
-### 读取缓存
-
-```go
-pageNums := []int{7, 8}
-cache := EHentai.GetCache("3138775")
-if cache != nil {
-    for _, page := range cache.ReadIter(pageNums...) {
-        fmt.Println(len(page.Data))
-    }
-}
-```
+见 [T_usage_test.go:UsageManageCache](T_usage_test.go#L160)

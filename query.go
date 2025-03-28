@@ -76,23 +76,15 @@ func (c Category) Format() string {
 }
 
 var (
-	// ErrCookieNotSet = errors.New("cookie not set")
 	ErrSadPanda            = errors.New("sad panda")
 	ErrNoHitsFound         = errors.New("no hits found")
-	ErrNoMatch             = errors.New("no match")
-	ErrEmptyMatch          = errors.New("empty match")
+	ErrRegMismatch         = errors.New("regexp mismatch")
+	ErrRegEmptyMatch       = errors.New("regexp empty match")
 	ErrNoResult            = errors.New("no result")
 	ErrEmptyTable          = errors.New("empty table")
-	ErrNoGidProvided       = errors.New("no gid provided")
-	ErrNoTokenProvided     = errors.New("no token provided")
-	ErrEndGreaterThanTotal = errors.New("end > total")
 	ErrNoImage             = errors.New("no image")
-	ErrEmptyBody           = errors.New("empty body")
+	ErrEndGreaterThanTotal = errors.New("end > total")
 	ErrFoundEmptyPageUrl   = errors.New("found empty page url")
-	ErrFoundEmptyImageData = errors.New("found empty image data")
-	ErrInvalidContentType  = errors.New("invalid content type")
-	ErrNoPageUrls          = errors.New("no page urls")
-	ErrNoImageUrls         = errors.New("no image urls")
 )
 
 type Cookie struct {
@@ -171,10 +163,10 @@ func querySearch(ctx context.Context, url, keyword string, categories ...Categor
 	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
 	matches := foundReg.FindStringSubmatch(foundResults)
 	if len(matches) == 0 {
-		return 0, nil, wrapErr(ErrNoMatch, foundResults)
+		return 0, nil, wrapErr(ErrRegMismatch, foundResults)
 	}
 	if matches[1] == "" {
-		return 0, nil, wrapErr(ErrEmptyMatch, foundResults)
+		return 0, nil, wrapErr(ErrRegEmptyMatch, foundResults)
 	}
 	total, _ = atoi(strings.ReplaceAll(matches[1], ",", ""))
 	if total == 0 {
@@ -286,10 +278,10 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 	numImages := doc.Find(".gpc").Text()
 	matches := numReg.FindStringSubmatch(numImages)
 	if len(matches) == 0 {
-		return nil, wrapErr(ErrNoMatch, numImages)
+		return nil, wrapErr(ErrRegMismatch, numImages)
 	}
 	if matches[1] == "" || matches[2] == "" {
-		return nil, wrapErr(ErrEmptyMatch, numImages)
+		return nil, wrapErr(ErrRegEmptyMatch, numImages)
 	}
 	end, _ := atoi(matches[1])
 	total, _ := atoi(matches[2])

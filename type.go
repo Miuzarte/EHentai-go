@@ -1,6 +1,7 @@
 package EHentai
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -10,6 +11,8 @@ var (
 	itoa = strconv.Itoa
 	atoi = strconv.Atoi
 )
+
+type set[T comparable] map[T]struct{}
 
 type ImageType int
 
@@ -160,6 +163,10 @@ type Page struct {
 	PageNum   int    `json:"page_num"`
 }
 
+func (p *Page) String() string {
+	return "/s/" + p.PageToken + "/" + itoa(p.GalleryId) + "-" + itoa(p.PageNum)
+}
+
 // PageList is the official alias of [Page]
 type PageList = Page
 
@@ -190,10 +197,18 @@ type Image struct {
 	Type ImageType
 }
 
+func (i *Image) String() string {
+	return "image/" + i.Type.String() + " (" + itoa(len(i.Data)) + " bytes)"
+}
+
 // PageData carrys page info and image data
 type PageData struct {
 	Page
 	Image
+}
+
+func (pd *PageData) String() string {
+	return pd.Page.String() + ": " + pd.Image.String()
 }
 
 type CachePageInfo struct {
@@ -204,14 +219,16 @@ type CachePageInfo struct {
 
 type CachePageInfos []CachePageInfo
 
-// Exist 判断页码是否存在
-func (cpi *CachePageInfos) Exist(pageNum int) bool {
-	for _, info := range *cpi {
-		if info.Num == pageNum {
-			return true
+// Get 返回页码对应的缓存信息
+//
+// Len 为 0 表示不存在
+func (cpi *CachePageInfos) Get(pageNum int) (pageInfo CachePageInfo) {
+	for i := range *cpi {
+		if (*cpi)[i].Num == pageNum {
+			return (*cpi)[i]
 		}
 	}
-	return false
+	return CachePageInfo{Num: pageNum, Type: 0, Len: 0}
 }
 
 // Lookup 构造哈希表查找页码
@@ -244,15 +261,31 @@ func (cpi *CachePageInfos) Lookup(pageNums []int) (pageInfos CachePageInfos) {
 	return pageInfos
 }
 
+func (cpi *CachePageInfos) append(pageInfos ...CachePageInfo) {
+	(*cpi) = append((*cpi), pageInfos...)
+}
+
+func (cpi *CachePageInfos) del(pageNum int) {
+	for i := range *cpi {
+		if (*cpi)[i].Num == pageNum {
+			*cpi = slices.Delete((*cpi), i, i+1)
+			return
+		}
+	}
+}
+
 type CacheGalleryMetadata struct {
 	Url     string          `json:"url"` // 画廊 URL
 	Gallery GalleryMetadata `json:"gallery"`
 
-	Pages []string `json:"pages"` // 画廊所有页的 URL, 读取缓存图片出错时可以直接用
+	// PageUrls []string `json:"page_urls"`
+	// 画廊所有页的 URL, 读取缓存图片出错时可以直接用
+	// 保证一定存在
+	PageUrls map[string]string `json:"page_urls"`
 
 	Files struct {
 		Dir   string         `json:"dir"`   // 画廊路径 `root/gid/`
 		Count int            `json:"count"` // 缓存数量
-		Pages CachePageInfos `json:"pages"`
+		Pages CachePageInfos `json:"pages"` // 缓存的页码列表
 	} `json:"files"` // 缓存文件列表
 }
