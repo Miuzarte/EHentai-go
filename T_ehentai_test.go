@@ -1,6 +1,7 @@
 package EHentai
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestEhQueryFSearch(t *testing.T) {
 	// t.Logf("%+v", results)
 
 	SetCookie("", "", "", "")
-	_, results, err := querySearch(EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
+	_, results, err := querySearch(t.Context(), EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,16 +29,16 @@ func TestEhQueryFSearch(t *testing.T) {
 }
 
 func TestFetchGalleryPageUrls(t *testing.T) {
-	t.Log(FetchGalleryPageUrls(TEST_GALLERY_URL))
+	t.Log(FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL))
 }
 
 func TestFetchGalleryImageUrls(t *testing.T) {
-	_, pageUrls, err := initDownloadGalleryUrl(TEST_GALLERY_URL)
+	_, pageUrls, err := initDownloadGalleryUrl(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, pageUrl := range pageUrls {
-		imgUrl, bak, err := fetchPageImageUrl(pageUrl)
+		imgUrl, bak, err := fetchPageImageUrl(t.Context(), pageUrl)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,14 +49,13 @@ func TestFetchGalleryImageUrls(t *testing.T) {
 }
 
 func TestFetchPageImageUrl(t *testing.T) {
-	t.Log(fetchPageImageUrl(TEST_PAGE_URL_0))
-	t.Log(fetchPageImageUrl(TEST_PAGE_URL_1))
+	ctx := t.Context()
+	t.Log(fetchPageImageUrl(ctx, TEST_PAGE_URL_0))
+	t.Log(fetchPageImageUrl(ctx, TEST_PAGE_URL_1))
 }
 
 func TestDownloadPages(t *testing.T) {
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
-	img, err := DownloadPages(ctx, TEST_PAGE_URL_0, TEST_PAGE_URL_1)
+	img, err := DownloadPages(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestDownlaodGalleryIter(t *testing.T) {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for page, err := range DownloadGalleryIter(TEST_GALLERY_URL) {
+	for page, err := range DownloadGalleryIter(context.Background(), TEST_GALLERY_URL) {
 		t.Log(len(page.Data), err)
 		if stop {
 			break
@@ -82,7 +82,7 @@ func TestDownloadPagesIter(t *testing.T) {
 		<-time.After(time.Second * 15)
 		stop = true
 	}()
-	for page, err := range DownloadPagesIter(TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
+	for page, err := range DownloadPagesIter(context.Background(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
 		t.Log(len(page.Data), err)
 		if stop {
 			break
@@ -91,17 +91,13 @@ func TestDownloadPagesIter(t *testing.T) {
 }
 
 func TestBakPageDownload(t *testing.T) {
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
 	// https://e-hentai.org/s/b7a3ead2d6/3138775-24
-	downloadPages(ctx, "https://e-hentai.org/s/b7a3ead2d6/3138775-24")
+	downloadPages(t.Context(), "https://e-hentai.org/s/b7a3ead2d6/3138775-24")
 }
 
 func TestJpegPageDownload(t *testing.T) {
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
 	SetCookie("", "", "", "")
-	datas, err := downloadPages(ctx, "https://exhentai.org/s/76360befe8/3222212-1")
+	datas, err := downloadPages(t.Context(), "https://exhentai.org/s/76360befe8/3222212-1")
 	if err != nil {
 		t.Fatal(err)
 	}

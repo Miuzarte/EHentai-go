@@ -1,6 +1,7 @@
 package EHentai
 
 import (
+	"context"
 	"errors"
 	netUrl "net/url"
 	"regexp"
@@ -121,8 +122,8 @@ func (c *Cookie) Ok() bool {
 // Found 1 result.
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
-func searchDetail(url, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
-	total, results, err := querySearch(url, keyword, categories...)
+func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
+	total, results, err := querySearch(ctx, url, keyword, categories...)
 	if err != nil {
 		return
 	}
@@ -138,7 +139,7 @@ func searchDetail(url, keyword string, categories ...Category) (total int, galle
 }
 
 // total != len(results) 即不止一页
-func querySearch(url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
+func querySearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err
@@ -156,8 +157,6 @@ func querySearch(url, keyword string, categories ...Category) (total int, result
 	}
 	u.RawQuery = querys.Encode()
 
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
 	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return 0, nil, err
@@ -264,7 +263,7 @@ func parseStars(stars string) (rating string) {
 var numReg = regexp.MustCompile(`Showing 1 - (\d+) of (\d+) images?`)
 
 // fetchGalleryPages 遍历获取所有页链接
-func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
+func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
 	defer func() {
 		if err == nil {
 			// 缓存页链接
@@ -277,8 +276,6 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
 	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return nil, err
@@ -319,9 +316,6 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 
 	limiter := newLimiter()
 	defer limiter.close()
-
-	ctx, cancel = TimeoutCtx()
-	defer cancel()
 
 	for page := range pages {
 		limiter.acquire()
@@ -368,13 +362,11 @@ func fetchGalleryPages(galleryUrl string) (pageUrls []string, err error) {
 }
 
 // fetchPageImageUrl 获取画廊某页的图直链与页备链
-func fetchPageImageUrl(pageUrl string) (imgUrl string, bakPage string, err error) {
+func fetchPageImageUrl(ctx context.Context, pageUrl string) (imgUrl string, bakPage string, err error) {
 	u, err := netUrl.Parse(pageUrl)
 	if err != nil {
 		return "", "", err
 	}
-	ctx, cancel := TimeoutCtx()
-	defer cancel()
 	doc, err := httpGetDoc(ctx, u)
 	if err != nil {
 		return "", "", err

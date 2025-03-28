@@ -14,7 +14,7 @@ var (
 	ErrNoPageProvided    = errors.New("no page provided")
 )
 
-// PostGalleryMetadata returns metadata of the provided galleries
+// PostGalleryMetadata posts to the official API and returns gallery metadata
 func PostGalleryMetadata(g ...GIdList) (resp *GalleryMetadataResponse, err error) {
 	defer func() {
 		if resp != nil && err == nil {
@@ -43,7 +43,7 @@ func PostGalleryMetadata(g ...GIdList) (resp *GalleryMetadataResponse, err error
 	return post[GalleryMetadataResponse](API_URL, reqBody)
 }
 
-// PostGalleryToken returns token of the provided pages
+// PostGalleryToken posts to the official API and returns gallery token
 func PostGalleryToken(p ...PageList) (*GalleryTokenResponse, error) {
 	if len(p) == 0 {
 		return nil, wrapErr(ErrNoPageProvided, nil)
