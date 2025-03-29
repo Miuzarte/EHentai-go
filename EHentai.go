@@ -117,7 +117,7 @@ func DownloadCovers(ctx context.Context, results ...coverProvider) ([]Image, err
 	for _, result := range results {
 		urls = append(urls, result.GetCover())
 	}
-	return downloadImages(ctx, urls...)
+	return downloadImages(ctx, urls)
 }
 
 // DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
@@ -164,16 +164,16 @@ func DownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) ([
 	if err != nil {
 		return nil, err
 	}
-	return downloadPages(ctx, availableCache, pageUrls...)
+	return downloadPages(ctx, availableCache, pageUrls)
 }
 
 // DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
 func DownloadPages(ctx context.Context, pageUrls ...string) ([]PageData, error) {
-	availableCache, err := initDownloadPageUrls(pageUrls...)
+	availableCache, err := initDownloadPageUrls(pageUrls)
 	if err != nil {
 		return nil, err
 	}
-	return downloadPages(ctx, availableCache, pageUrls...)
+	return downloadPages(ctx, availableCache, pageUrls)
 }
 
 // FetchGalleryPageUrls 获取画廊下所有页链接

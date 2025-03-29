@@ -107,6 +107,12 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cach
 			return nil, wrapErr(ErrNoPageUrlProvided, nil)
 		}
 		pageUrls = meta.pageUrls
+	} else {
+		// 检查 pageUrls 是否来自同一画廊
+		gIds := collectGIds(pageUrls)
+		if len(gIds) != 1 {
+			return nil, wrapErr(ErrTooManyGIds, gIds)
+		}
 	}
 
 	fileCount, _ := atoi(gMeta.FileCount)

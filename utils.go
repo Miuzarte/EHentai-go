@@ -187,3 +187,14 @@ func pageUrlsToSlice(pageUrls map[string]string) []string {
 	}
 	return s
 }
+
+// 去重收集画廊 ID
+func collectGIds(pageUrls []string) set[int] {
+	gIds := make(set[int])
+	s := make(set[int])
+	for _, pageUrl := range pageUrls {
+		gId := UrlToPage(pageUrl).GalleryId
+		s[gId] = struct{}{}
+	}
+	return gIds
+}

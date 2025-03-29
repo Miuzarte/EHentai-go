@@ -16,6 +16,7 @@ var ErrDownloadUnreachableCase = fmt.Errorf("download: unreachable case")
 var (
 	ErrNoPageUrlProvided   = errors.New("no page url provided")
 	ErrNoImageUrlProvided  = errors.New("no image url provided")
+	ErrTooManyGIds         = errors.New("too many gallery ids")
 	ErrInvalidContentType  = errors.New("invalid content type")
 	ErrEmptyBody           = errors.New("empty body")
 	ErrFoundEmptyImageData = errors.New("found empty image data")
@@ -71,7 +72,7 @@ func (dl *download) start(ctx context.Context) {
 
 func newPageDownload(urls []string) (dls []*download) {
 	// 获取可写的画廊缓存
-	caches, _ := initDownloadPageUrls(urls...)
+	caches, _ := initDownloadPageUrls(urls)
 	dls = make([]*download, len(urls))
 	for i := range urls {
 		pu := UrlToPage(urls[i])
@@ -220,17 +221,12 @@ func initDownloadGalleryUrl(ctx context.Context, galleryUrl string, pageNums ...
 }
 
 // initDownloadPageUrls 返回可用的本地缓存
-func initDownloadPageUrls(pageUrls ...string) (cgs map[int]*cacheGallery, err error) {
+func initDownloadPageUrls(pageUrls []string) (cgs map[int]*cacheGallery, err error) {
 	if len(pageUrls) == 0 {
 		return nil, wrapErr(ErrNoPageUrlProvided, nil)
 	}
 
-	// 去重收集画廊 ID
-	s := make(set[int])
-	for _, pageUrl := range pageUrls {
-		gId := UrlToPage(pageUrl).GalleryId
-		s[gId] = struct{}{}
-	}
+	s := collectGIds(pageUrls)
 
 	cgs = make(map[int]*cacheGallery, len(s))
 	for gId := range s {
@@ -275,7 +271,7 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 }
 
 // downloadImages 并发从图片直链下载
-func downloadImages(ctx context.Context, imgUrls ...string) (imgs []Image, err error) {
+func downloadImages(ctx context.Context, imgUrls []string) (imgs []Image, err error) {
 	if len(imgUrls) == 0 {
 		return nil, wrapErr(ErrNoImageUrlProvided, nil)
 	}
@@ -351,7 +347,7 @@ retry:
 // downloadPages 并发下载画廊某页的图片
 // , 下载失败时尝试备链
 // , 根据设置尝试从缓存获取
-func downloadPages(ctx context.Context, aCache map[int]*cacheGallery, pageUrls ...string) (pageDatas []PageData, err error) {
+func downloadPages(ctx context.Context, aCache map[int]*cacheGallery, pageUrls []string) (pageDatas []PageData, err error) {
 	if len(pageUrls) == 0 {
 		return nil, wrapErr(ErrNoPageUrlProvided, nil)
 	}
