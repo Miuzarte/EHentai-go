@@ -4,6 +4,14 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 
 给机器人做着玩的 部分功能有所缺失, 比如搜索没有翻页之类的
 
+## Features
+
+- 完全并发, 可配置并发数
+- 集成 [EhTagTranslation](github.com/EhTagTranslation/Database)
+- 指定下载画廊的某(几)页
+- 本地画廊缓存
+- 域名前置
+
 ## 用法
 
 ### 设置 Cookie (初始化时会尝试读取环境变量)
@@ -87,10 +95,9 @@ EHentai.SetAutoCacheEnabled(false)
 
 // 设置缓存文件夹路径
 // 留空默认为 "./EHentaiCache/"
-// 路径形如 "EHentaiCache/3138775/metadata"
-// , "EHentaiCache/3138775/1.webp"
-// , "EHentaiCache/3138775/2.webp"
-// ...
+// 路径形如 "EHentaiCache/3138775/metadata",
+// "EHentaiCache/3138775/1.webp",
+// "EHentaiCache/3138775/2.webp"...
 EHentai.SetCacheDir("path/to/cache")
 ```
 

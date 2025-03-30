@@ -88,10 +88,9 @@ func UsageSetCache(t *testing.T) {
 
 	// 设置缓存文件夹路径
 	// 留空默认为 "./EHentaiCache/"
-	// 路径形如 "EHentaiCache/3138775/metadata"
-	// , "EHentaiCache/3138775/1.webp"
-	// , "EHentaiCache/3138775/2.webp"
-	// ...
+	// 路径形如 "EHentaiCache/3138775/metadata",
+	// "EHentaiCache/3138775/1.webp",
+	// "EHentaiCache/3138775/2.webp"...
 	SetCacheDir("path/to/cache")
 }
 
@@ -253,9 +252,9 @@ func UsageManageCache(t *testing.T) {
 	cache.ReadByPageUrl(pageUrls[0])
 
 	// pageUrls 不可为空
-	// 为了方便起见
-	// , len(pageDatas) == len(pageUrls) 且顺序一致
-	// , 是否命中缓存只需检查 len(pageDatas[i].Image.Data)
+	// 为了方便起见,
+	// len(pageDatas) == len(pageUrls) 且顺序一致,
+	// 是否命中缓存只需检查 len(pageDatas[i].Image.Data)
 	cache.ReadByPageUrls(pageUrls)
 
 	// 删除某些页

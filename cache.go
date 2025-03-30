@@ -382,9 +382,9 @@ func (cg *cacheGallery) ReadByPageUrl(url string) (pageData PageData, err error)
 //
 // pageUrls 不可为空
 //
-// 为了方便起见
-// , len(pageDatas) == len(pageUrls) 且顺序一致
-// , 是否命中缓存只需检查 len(pageDatas[i].Image.Data)
+// 为了方便起见,
+// len(pageDatas) == len(pageUrls) 且顺序一致,
+// 是否命中缓存只需检查 len(pageDatas[i].Image.Data)
 func (cg *cacheGallery) ReadByPageUrls(pageUrls []string) (pageDatas []PageData) {
 	if len(pageUrls) == 0 {
 		return nil
