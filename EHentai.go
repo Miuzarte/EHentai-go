@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	cookie     = Cookie{}
+	cookie     = cookieManager{}
 	threads    = 4 // 下载并发数
 	retryDepth = 2 // 使用页备链重试次数
 
@@ -17,10 +17,35 @@ var (
 
 // SetCookie 设置 cookie, 访问 exhentai 时必需
 func SetCookie(memberId, passHash, igneous, sk string) {
-	cookie.IpbMemberId = memberId
-	cookie.IpbPassHash = passHash
-	cookie.Igneous = igneous
-	cookie.Sk = sk
+	Cookie.ipbMemberId = memberId
+	Cookie.ipbPassHash = passHash
+	Cookie.igneous = igneous
+	Cookie.sk = sk
+}
+
+// SetCookieFromString 从字符串解析 cookie
+//
+// 返回值 n 为解析的 cookie 数量
+func SetCookieFromString(s string) (n int, err error) {
+	return cookie.fromString(s)
+}
+
+// SetDomainFronting 设置是否使用域名前置
+func SetDomainFronting(b bool) {
+	domainFrontingInterceptor.Enabled = b
+}
+
+// SetCustomIpProvider 自定义域名前置所使用的 ip 获取器
+func SetCustomIpProvider(iPprovider IpProvider) {
+	domainFrontingInterceptor.IpProvider = iPprovider
+}
+
+func AddInterceptors(interceptors ...Interceptor) {
+	interceptorRoundTrip.Interceptors = append(interceptorRoundTrip.Interceptors, interceptors...)
+}
+
+func SetInterceptors(interceptors ...Interceptor) {
+	interceptorRoundTrip.Interceptors = append(defaultInterceptors, interceptors...)
 }
 
 // SetThreads 设置下载并发数
@@ -29,8 +54,10 @@ func SetThreads(n int) {
 }
 
 // SetRetryDepth 设置重试次数
-// , 默认为 2
-// , 直链下载失败时使用页备链重试
+//
+// 默认为 2
+//
+// 直链下载失败时使用页备链重试
 func SetRetryDepth(depth int) {
 	retryDepth = depth
 }
@@ -64,10 +91,9 @@ func SetAutoCacheEnabled(b bool) {
 //
 // 留空默认为 "./EHentaiCache/"
 //
-// 路径形如 "EHentaiCache/3138775/metadata"
-// , "EHentaiCache/3138775/1.webp"
-// , "EHentaiCache/3138775/2.webp"
-// ...
+// 路径形如 "EHentaiCache/3138775/metadata",
+// "EHentaiCache/3138775/1.webp",
+// "EHentaiCache/3138775/2.webp"...
 func SetCacheDir(dir string) {
 	if dir == "" {
 		dir = DEFAULT_CACHE_DIR

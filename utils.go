@@ -76,40 +76,48 @@ func UrlToPage(u string) Page {
 	return Page{PageToken: pToken, GalleryId: gid, PageNum: pageNum}
 }
 
-func pageUrlsToGalleryId(pageUrls []string) set[string] {
-	gIds := make(set[string])
-	for _, u := range pageUrls {
-		_, gId, _ := UrlGetGIdGToken(u)
-		gIds[gId] = struct{}{}
-	}
-	return gIds
-}
-
-func httpGet(ctx context.Context, url *netUrl.URL) (*http.Response, error) {
+func httpGet(ctx context.Context, url *netUrl.URL) (resp *http.Response, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-	if cookie.Ok() {
-		req.Header.Set("Cookie", cookie.String())
+
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+			return resp, err
+		}
+		return nil, err
 	}
-	return http.DefaultClient.Do(req)
+
+	return resp, nil
 }
 
-func httpGetDoc(ctx context.Context, url *netUrl.URL) (*goquery.Document, error) {
+func httpGetDoc(ctx context.Context, url *netUrl.URL) (doc *goquery.Document, err error) {
 	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+
+	doc, err = goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+
 	if sadPandaCheck(doc) {
 		return nil, wrapErr(ErrSadPanda, nil)
 	}
 	return doc, nil
+}
+
+func extractMainDomain(host string) string {
+	parts := strings.Split(host, ".")
+	if len(parts) < 2 {
+		return host
+	}
+	return parts[len(parts)-2] + "." + parts[len(parts)-1]
 }
 
 func sadPandaCheck(doc *goquery.Document) bool {

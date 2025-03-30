@@ -6,11 +6,20 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 
 ## 用法
 
-### 设置 Cookie
+### 设置 Cookie (初始化时会尝试读取环境变量)
 
 ```go
+// "EHENTAI_COOKIE"
+// OR
+// "EHENTAI_COOKIE_IPB_MEMBER_ID"
+// "EHENTAI_COOKIE_IPB_PASS_HASH"
+// "EHENTAI_COOKIE_IGNEOUS"
+// "EHENTAI_COOKIE_SK"
+
 // sk 为空时, 搜索结果标题只有英文
 EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
+// 也可以直接设置字符串
+// EHentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
 ```
 
 ### 初始化 [EhTagTranslation](github.com/EhTagTranslation/Database) 数据库
@@ -24,6 +33,21 @@ if err != nil {
     panic(err)
 }
 fmt.Printf("InitEhTagDB took %s\n", time.Since(tStart))
+```
+
+### 设置域名前置
+
+```go
+// 默认为 false
+EHentai.SetDomainFronting(false)
+
+// 自定义域名前置所使用的 ip 获取器
+// type IpProvider interface {
+//     Supports(host string) bool
+//     NextIp(host string) string
+//     AddUnavailableIp(host, ip string)
+// }
+EHentai.SetCustomIpProvider(IpProvider(nil))
 ```
 
 ### 设置下载并发数

@@ -87,28 +87,6 @@ var (
 	ErrFoundEmptyPageUrl   = errors.New("found empty page url")
 )
 
-type Cookie struct {
-	IpbMemberId string
-	IpbPassHash string
-	Igneous     string
-	Sk          string // 不给的话搜索结果只有英文
-}
-
-func (c *Cookie) String() string {
-	if !c.Ok() {
-		return ""
-	}
-	s := "ipb_member_id=" + c.IpbMemberId + "; ipb_pass_hash=" + c.IpbPassHash + "; igneous=" + c.Igneous
-	if c.Sk != "" {
-		s += "; sk=" + c.Sk
-	}
-	return s
-}
-
-func (c *Cookie) Ok() bool {
-	return c.IpbMemberId != "" && c.IpbPassHash != "" && c.Igneous != "" // sk 可以为空
-}
-
 // Found about 192,819 results.
 // Found 2 results.
 // Found 1 result.
