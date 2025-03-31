@@ -1,9 +1,10 @@
 package EHentai
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
-	netUrl "net/url"
 	"os"
 	"slices"
 	"strings"
@@ -76,8 +77,8 @@ func UrlToPage(u string) Page {
 	return Page{PageToken: pToken, GalleryId: gid, PageNum: pageNum}
 }
 
-func httpGet(ctx context.Context, url *netUrl.URL) (resp *http.Response, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
+func httpGet(ctx context.Context, url string) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +95,7 @@ func httpGet(ctx context.Context, url *netUrl.URL) (resp *http.Response, err err
 	return resp, nil
 }
 
-func httpGetDoc(ctx context.Context, url *netUrl.URL) (doc *goquery.Document, err error) {
+func httpGetDoc(ctx context.Context, url string) (doc *goquery.Document, err error) {
 	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,36 @@ func httpGetDoc(ctx context.Context, url *netUrl.URL) (doc *goquery.Document, er
 	if sadPandaCheck(doc) {
 		return nil, wrapErr(ErrSadPanda, nil)
 	}
+	if ipBannedCheck(doc) {
+		return nil, wrapErr(ErrIpBanned, nil)
+	}
 	return doc, nil
+}
+
+func post[T any](ctx context.Context, url string, body any) (*T, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var respBody T
+	err = json.NewDecoder(resp.Body).Decode(&respBody)
+	if err != nil {
+		return nil, err
+	}
+
+	return &respBody, nil
 }
 
 func extractMainDomain(host string) string {
@@ -122,6 +152,13 @@ func extractMainDomain(host string) string {
 
 func sadPandaCheck(doc *goquery.Document) bool {
 	return doc.Find("head").Length() == 0 && doc.Find("body").Length() == 0
+}
+
+func ipBannedCheck(doc *goquery.Document) bool {
+	// This IP address has been temporarily banned due to an excessive request rate.
+	// This probably means you are using automated mirroring/harvesting software or share the IP address with someone who does.
+	// The ban expires in 19 hours
+	return strings.Contains(doc.Find("body").Text(), "This IP address has been temporarily banned")
 }
 
 func removeDuplication[T comparable](s []T) []T {
@@ -155,10 +192,24 @@ func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	return
 }
 
-func rearrange[T any](s []T, indexes []int) (trimed []T) {
-	trimed = make([]T, 0, len(indexes))
-	for _, i := range indexes {
-		trimed = append(trimed, s[i])
+func slicePlus(s []int, op int) []int {
+	if len(s) == 0 {
+		return nil
+	}
+	newS := make([]int, len(s))
+	for i := range s {
+		newS[i] = s[i] + op
+	}
+	return newS
+}
+
+func rearange[T any](s []T, indexes []int) (rearranged []T) {
+	if len(indexes) == 0 {
+		return s
+	}
+	rearranged = make([]T, len(indexes))
+	for i := range indexes {
+		rearranged[i] = s[indexes[i]]
 	}
 	return
 }
@@ -199,10 +250,9 @@ func pageUrlsToSlice(pageUrls map[string]string) []string {
 // 去重收集画廊 ID
 func collectGIds(pageUrls []string) set[int] {
 	gIds := make(set[int])
-	s := make(set[int])
 	for _, pageUrl := range pageUrls {
 		gId := UrlToPage(pageUrl).GalleryId
-		s[gId] = struct{}{}
+		gIds[gId] = struct{}{}
 	}
 	return gIds
 }

@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
-	"net/url"
+	netUrl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -58,12 +58,12 @@ type cookieManager struct {
 	sk          string // 不给的话搜索结果只有英文
 }
 
-func (c *cookieManager) SetCookies(_ *url.URL, _ []*http.Cookie) {
+func (c *cookieManager) SetCookies(_ *netUrl.URL, _ []*http.Cookie) {
 	// only for implementation of [http.CookieJar] currently
 	// TODO?: implement account login
 }
 
-func (c *cookieManager) Cookies(u *url.URL) []*http.Cookie {
+func (c *cookieManager) Cookies(u *netUrl.URL) []*http.Cookie {
 	domain := extractMainDomain(u.Host)
 	if domain != EHENTAI_DOMAIN && domain != EXHENTAI_DOMAIN {
 		return nil
@@ -307,13 +307,9 @@ func (p *EhRoundRobinIpProvider) Supports(host string) bool {
 	return ok && len(ips) > 0
 }
 
-func (p *EhRoundRobinIpProvider) NextIp(host string) string {
-	p.mu1.RLock()
-	defer p.mu1.RUnlock()
-
-	if !p.Supports(host) {
-		return host
-	}
+func (p *EhRoundRobinIpProvider) NextIp(host string) (ip string) {
+	p.mu1.Lock()
+	defer p.mu1.Unlock()
 
 	ips := p.host2Ips[host]
 	index := p.ipsIndex[host]
@@ -326,7 +322,7 @@ func (p *EhRoundRobinIpProvider) NextIp(host string) string {
 		break
 	}
 
-	ip := ips[index]
+	ip = ips[index]
 	p.ipsIndex[host] = (index + 1) % len(ips)
 	return ip
 }

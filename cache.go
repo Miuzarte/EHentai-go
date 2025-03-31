@@ -66,7 +66,7 @@ func CreateCacheFromUrl(gUrl string) (cache *cacheGallery, err error) {
 	}
 
 	if gallery == nil {
-		resp, err := PostGalleryMetadata(gu)
+		resp, err := PostGalleryMetadata(context.Background(), gu)
 		if err != nil {
 			return nil, err
 		}

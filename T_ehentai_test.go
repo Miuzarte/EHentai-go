@@ -2,115 +2,274 @@ package EHentai
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 )
 
 const (
-	TEST_GALLERY_URL = "https://e-hentai.org/g/3138775/30b0285f9b/"
-	TEST_PAGE_URL_0  = "https://e-hentai.org/s/859299c9ef/3138775-7"
-	TEST_PAGE_URL_1  = "https://e-hentai.org/s/0b2127ea05/3138775-8"
+	TEST_FSEARCH_KEYWORD = "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜"
+	TEST_GALLERY_GID     = 3138775
+	TEST_GALLERY_GTOKEN  = "30b0285f9b"
+	TEST_GALLERY_URL     = "https://e-hentai.org/g/3138775/30b0285f9b/"
+	TEST_GALLERY_PAGE_0  = 5
+	TEST_GALLERY_PAGE_1  = 6
+	TEST_PAGE_URL_0      = "https://e-hentai.org/s/859299c9ef/3138775-7"
+	TEST_PAGE_URL_1      = "https://e-hentai.org/s/0b2127ea05/3138775-8"
 )
 
-func TestEhQueryFSearch(t *testing.T) {
-	// results, err := queryFSearch(EHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// t.Logf("%+v", results)
+var (
+	searchTotal   int
+	searchResults []FSearchResult
+)
 
-	SetCookie("", "", "", "")
-	_, results, err := querySearch(t.Context(), EXHENTAI_URL, "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜")
+var (
+	searchDetailTotal   int
+	searchDetailResults []GalleryMetadata
+)
+
+func getSearch(ctx context.Context) (total int, results []FSearchResult, err error) {
+	if searchTotal != 0 && len(searchResults) != 0 {
+		return searchTotal, searchResults, nil
+	}
+	total, results, err = EHSearch(ctx, TEST_FSEARCH_KEYWORD)
+	if err != nil {
+		return
+	}
+
+	searchTotal = total
+	searchResults = results
+	return
+}
+
+func getSearchDetail(ctx context.Context) (total int, results []GalleryMetadata, err error) {
+	if searchDetailTotal != 0 && len(searchDetailResults) != 0 {
+		return searchDetailTotal, searchDetailResults, nil
+	}
+	total, results, err = EHSearchDetail(ctx, TEST_FSEARCH_KEYWORD)
+	if err != nil {
+		return
+	}
+
+	searchDetailTotal = total
+	searchDetailResults = results
+	return
+}
+
+func getCoverProviders(ctx context.Context) (providers []coverProvider, err error) {
+	_, results, err := getSearch(ctx)
+	if err != nil {
+		return
+	}
+
+	for _, r := range results {
+		providers = append(providers, &r)
+	}
+	return
+}
+
+func TestPostGalleryMetadata(t *testing.T) {
+	resp, err := PostGalleryMetadata(t.Context(), GIdList{3138775, "30b0285f9b"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%+v", results)
+	t.Logf("%+v", *resp)
 }
 
-func TestFetchGalleryPageUrls(t *testing.T) {
-	t.Log(FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL))
-}
-
-func TestFetchGalleryImageUrls(t *testing.T) {
-	pageUrls, _, err := initDownloadGalleryUrl(t.Context(), TEST_GALLERY_URL)
+func TestPostGalleryToken(t *testing.T) {
+	resp, err := PostGalleryToken(t.Context(), PageList{"0b2127ea05", 3138775, 8})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, pageUrl := range pageUrls {
-		imgUrl, bak, err := fetchPageImageUrl(t.Context(), pageUrl)
+	t.Logf("%+v", *resp)
+}
+
+func TestEHSearch(t *testing.T) {
+	total, results, err := getSearch(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total == 0 {
+		t.Fatal("total == 0")
+	}
+
+	for _, r := range results {
+		t.Log(r.Title)
+	}
+}
+
+func TestEHSearchDetail(t *testing.T) {
+	total, results, err := getSearchDetail(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total == 0 {
+		t.Fatal("total == 0")
+	}
+	if len(results) == 0 {
+		t.Fatal("empty results")
+	}
+
+	for _, r := range results {
+		t.Log(r.TitleJpn)
+	}
+}
+
+func TestDownloadCovers(t *testing.T) {
+	providers, err := getCoverProviders(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) == 0 {
+		t.Fatal("empty providers")
+	}
+
+	for img, err := range DownloadCoversIter(t.Context(), providers...) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log(imgUrl)
-		t.Log(bak)
-		println()
+		if len(img.Data) == 0 {
+			t.Fatal("empty data")
+		}
+		t.Log(img.String())
 	}
 }
 
-func TestFetchPageImageUrl(t *testing.T) {
-	ctx := t.Context()
-	t.Log(fetchPageImageUrl(ctx, TEST_PAGE_URL_0))
-	t.Log(fetchPageImageUrl(ctx, TEST_PAGE_URL_1))
+func TestDownloadGallery(t *testing.T) {
+	n := 0
+	for page, err := range DownloadGalleryIter(t.Context(), TEST_GALLERY_URL, TEST_GALLERY_PAGE_0, TEST_GALLERY_PAGE_1) {
+		n++
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Data) == 0 {
+			t.Fatal("empty data")
+		}
+		t.Log(page.String())
+	}
+	if n != 2 {
+		t.Fatal("n != 2")
+	}
 }
 
 func TestDownloadPages(t *testing.T) {
-	img, err := DownloadPages(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1)
+	n := 0
+	for page, err := range DownloadPagesIter(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
+		n++
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Data) == 0 {
+			t.Fatal("empty data")
+		}
+		t.Log(page.String())
+	}
+	if n != 2 {
+		t.Fatal("n != 2")
+	}
+}
+
+func TestFetchGalleryPageUrls(t *testing.T) {
+	pageUrls, err := FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(len(img[0].Data))
-}
+	if len(pageUrls) == 0 {
+		t.Fatal("empty page urls")
+	}
 
-func TestDownlaodGalleryIter(t *testing.T) {
-	stop := false
-	go func() {
-		<-time.After(time.Second * 15)
-		stop = true
-	}()
-	for page, err := range DownloadGalleryIter(context.Background(), TEST_GALLERY_URL) {
-		t.Log(len(page.Data), err)
-		if stop {
-			break
-		}
+	for _, pageUrl := range pageUrls {
+		t.Log(pageUrl)
 	}
 }
 
-func TestDownloadPagesIter(t *testing.T) {
-	stop := false
-	go func() {
-		<-time.After(time.Second * 15)
-		stop = true
-	}()
-	for page, err := range DownloadPagesIter(context.Background(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
-		t.Log(len(page.Data), err)
-		if stop {
-			break
-		}
-	}
-}
-
-func TestBakPageDownload(t *testing.T) {
-	// https://e-hentai.org/s/b7a3ead2d6/3138775-24
-	DownloadPages(t.Context(), "https://e-hentai.org/s/b7a3ead2d6/3138775-24")
-}
-
-func TestJpegPageDownload(t *testing.T) {
-	SetCookie("", "", "", "")
-	datas, err := DownloadPages(t.Context(), "https://exhentai.org/s/76360befe8/3222212-1")
+func TestMetaCache(t *testing.T) {
+	gMetaCache = newRamCache[int, metaCache](cacheTimeout)
+	metadataCacheEnabled = true
+	var err error
+	var resp *GalleryMetadataResponse
+	var pageUrls []string
+	resp, err = PostGalleryMetadata(t.Context(), GIdList{TEST_GALLERY_GID, TEST_GALLERY_GTOKEN})
 	if err != nil {
 		t.Fatal(err)
 	}
-	page := datas[0]
-	if len(page.Data) == 0 {
-		t.Fatal("empty data")
+	if len(resp.GMetadata) == 0 {
+		t.Fatal("len(resp.GMetadata) == 0")
 	}
-	os.WriteFile("test.jpg", page.Data, 0o644)
+	pageUrls, err = fetchGalleryPages(t.Context(), TEST_GALLERY_URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pageUrls) == 0 {
+		t.Fatal("len(pageUrls) == 0")
+	}
+
+	mc := MetaCacheRead(TEST_GALLERY_GID)
+	if mc == nil {
+		t.Fatal("nil meta cache")
+	}
+	if mc.gallery == nil {
+		t.Fatal("nil meta cache.gallery")
+	}
+	if len(mc.pageUrls) == 0 {
+		t.Fatal("empty meta cache.pageUrls")
+	}
+	if mc.gallery.GId != TEST_GALLERY_GID {
+		t.Fatalf("meta cache.gallery.GId != %d\n", TEST_GALLERY_GID)
+	}
 }
 
-func TestCache(t *testing.T) {
-	// download [TEST_PAGE_URL_0] (write cache)
-	// read cache
-	// download [TEST_PAGE_URL_0], [TEST_PAGE_URL_1] (write cache)
-	// read cache
+func TestGalleryCache(t *testing.T) {
+	defer func() {
+		_ = DeleteCache(TEST_GALLERY_GID)
+	}()
+
+	SetDomainFronting(true)
+	autoCacheEnabled = true
+	var cache *cacheGallery
+
+	// download [TEST_GALLERY_URL]
+	// : [TEST_GALLERY_PAGE_0], [TEST_GALLERY_PAGE_1]
+	// (write cache)
+	for page, err := range DownloadGalleryIter(t.Context(), TEST_GALLERY_URL, TEST_GALLERY_PAGE_0, TEST_GALLERY_PAGE_1) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(page.String())
+	}
+
+	// 缓存的写入是异步的, 等待元数据更新
+	<-time.After(time.Second)
+	cache = GetCache(TEST_GALLERY_GID)
+	if cache == nil {
+		t.Fatal("nil cache")
+	}
+	// cache pages == 2
+	if cache.meta.Files.Count != 2 {
+		t.Fatal("cache.meta.Files.Count != 2")
+	}
+	for i, page := range cache.meta.Files.Pages {
+		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
+	}
+
+	// download [TEST_PAGE_URL_0], [TEST_PAGE_URL_1]
+	// (write cache)
+	for page, err := range DownloadPagesIter(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(page.String())
+	}
+
+	<-time.After(time.Second)
+	cache = GetCache(TEST_GALLERY_GID)
+	if cache == nil {
+		t.Fatal("nil cache")
+	}
+	// cache pages == 4
+	if cache.meta.Files.Count != 4 {
+		t.Fatal("cache.meta.Files.Count != 4")
+	}
+	for i, page := range cache.meta.Files.Pages {
+		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	netUrl "net/url"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,6 +76,7 @@ func (c Category) Format() string {
 
 var (
 	ErrSadPanda            = errors.New("sad panda")
+	ErrIpBanned            = errors.New("ip banned")
 	ErrNoHitsFound         = errors.New("no hits found")
 	ErrRegMismatch         = errors.New("regexp mismatch")
 	ErrRegEmptyMatch       = errors.New("regexp empty match")
@@ -93,7 +93,7 @@ var (
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
 func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
-	total, results, err := querySearch(ctx, url, keyword, categories...)
+	total, results, err := queryFSearch(ctx, url, keyword, categories...)
 	if err != nil {
 		return
 	}
@@ -101,7 +101,7 @@ func searchDetail(ctx context.Context, url, keyword string, categories ...Catego
 	for i := range results {
 		list[i] = Gallery{results[i].Gid, results[i].Token}
 	}
-	resp, err := PostGalleryMetadata(list...)
+	resp, err := PostGalleryMetadata(ctx, list...)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -109,7 +109,7 @@ func searchDetail(ctx context.Context, url, keyword string, categories ...Catego
 }
 
 // total != len(results) 即不止一页
-func querySearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
+func queryFSearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err
@@ -127,7 +127,7 @@ func querySearch(ctx context.Context, url, keyword string, categories ...Categor
 	}
 	u.RawQuery = querys.Encode()
 
-	doc, err := httpGetDoc(ctx, u)
+	doc, err := httpGetDoc(ctx, u.String())
 	if err != nil {
 		return 0, nil, err
 	}
@@ -137,6 +137,7 @@ func querySearch(ctx context.Context, url, keyword string, categories ...Categor
 	if noHitsFound != "" {
 		return 0, nil, wrapErr(ErrNoHitsFound, noHitsFound)
 	}
+
 	// body > div.ido > div:nth-child(2) > div.searchtext > p
 	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
 	matches := foundReg.FindStringSubmatch(foundResults)
@@ -178,9 +179,10 @@ func querySearch(ctx context.Context, url, keyword string, categories ...Categor
 		stars, _ := s.Find("td.gl2c > div > div.ir").Attr("style")
 		url, _ := s.Find("td.gl3c.glname > a").Attr("href")
 		var tags []string
-		s.Find("td.gl3c.glname > a > div > div.gt").Each(func(i int, s *goquery.Selection) {
-			tags = append(tags, s.AttrOr("title", s.Text()))
-		})
+		s.Find("td.gl3c.glname > a > div > div.gt").
+			Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
 		title := s.Find("td.gl3c.glname > a > div.glink").Text()
 		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
 		domain, gId, gToken := UrlGetGIdGToken(url)
@@ -242,11 +244,7 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 		}
 	}()
 
-	u, err := netUrl.Parse(galleryUrl)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := httpGetDoc(ctx, u)
+	doc, err := httpGetDoc(ctx, galleryUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -299,8 +297,13 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 			if page == 0 { // 起始页不需要重新加载
 				pageDoc = doc
 			} else {
+				u, err := netUrl.Parse(galleryUrl)
+				if err != nil {
+					errs <- err
+					return
+				}
 				u.RawQuery = "p=" + itoa(page)
-				pageDoc, err = httpGetDoc(ctx, u)
+				pageDoc, err = httpGetDoc(ctx, u.String())
 				if err != nil {
 					errs <- err
 					return
@@ -308,7 +311,9 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 			}
 			// #gdt > a:nth-child(*)
 			pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-				pageUrls[page*end+i] = s.AttrOr("href", "")
+				index := page*end + i
+				url := s.AttrOr("href", "")
+				pageUrls[index] = url
 			})
 		}(page)
 	}
@@ -324,8 +329,10 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 		}
 	}
 
-	if index := slices.Index(pageUrls, ""); index >= 0 {
-		return nil, wrapErr(ErrFoundEmptyPageUrl, index)
+	for i := range pageUrls {
+		if pageUrls[i] == "" {
+			return nil, wrapErr(ErrFoundEmptyPageUrl, i)
+		}
 	}
 
 	return pageUrls, nil
@@ -333,11 +340,7 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 
 // fetchPageImageUrl 获取画廊某页的图直链与页备链
 func fetchPageImageUrl(ctx context.Context, pageUrl string) (imgUrl string, bakPage string, err error) {
-	u, err := netUrl.Parse(pageUrl)
-	if err != nil {
-		return "", "", err
-	}
-	doc, err := httpGetDoc(ctx, u)
+	doc, err := httpGetDoc(ctx, pageUrl)
 	if err != nil {
 		return "", "", err
 	}

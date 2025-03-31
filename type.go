@@ -242,7 +242,9 @@ func (cpi *CachePageInfos) Lookup(pageNums []int) (pageInfos CachePageInfos) {
 		return nil
 	}
 	if len(pageNums) == 0 {
-		return *cpi
+		pageInfos = make(CachePageInfos, 0, len(*cpi))
+		pageInfos = append(pageInfos, (*cpi)...)
+		return pageInfos
 	}
 
 	pagesMap := make(map[int]*CachePageInfo, len(*cpi))

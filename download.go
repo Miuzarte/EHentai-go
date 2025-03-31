@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	netUrl "net/url"
 	"strings"
 	"sync"
 )
@@ -24,11 +23,11 @@ var (
 
 // 之后不会扩展, 不使用接口
 type download struct {
-	url          string
-	cacheToWrite *cacheGallery // 存在时往里写
-	page         *PageData
-	img          *Image
-	err          chan error
+	url   string
+	cache *cacheGallery
+	page  *PageData
+	img   *Image
+	err   chan error
 }
 
 func (dl *download) done() bool {
@@ -50,35 +49,50 @@ func (dl *download) start(ctx context.Context) {
 	switch {
 	case dl.page != nil:
 		var page PageData
+		if autoCacheEnabled && dl.cache != nil {
+			// 读缓存
+			page, err = dl.cache.ReadOne(dl.page.PageNum)
+			if err == nil {
+				dl.page = &page
+				return
+			}
+		}
+
 		page, err = downloadPage(ctx, dl.url)
 		if err == nil {
 			dl.page = &page
 			// 写缓存
-			if autoCacheEnabled && dl.cacheToWrite != nil {
-				go dl.cacheToWrite.Write(page)
+			if autoCacheEnabled && dl.cache != nil {
+				go dl.cache.Write(page)
 			}
 		}
+		return
+
 	case dl.img != nil:
 		var img Image
 		img, err = downloadImage(ctx, dl.url)
 		if err == nil {
 			dl.img = &img
 		}
+		return
 
 	default:
 		panic(ErrDownloadUnreachableCase)
 	}
 }
 
-func newPageDownload(urls []string) (dls []*download) {
+func newPageDownload(urls []string, aCaches map[int]*cacheGallery) (dls []*download) {
 	// 获取可写的画廊缓存
-	caches, _ := initDownloadPageUrls(urls)
 	dls = make([]*download, len(urls))
 	for i := range urls {
 		pu := UrlToPage(urls[i])
+		var cache *cacheGallery
+		if aCaches != nil {
+			cache = aCaches[pu.GalleryId]
+		}
 		dls[i] = &download{
-			url:          urls[i],
-			cacheToWrite: caches[pu.GalleryId],
+			url:   urls[i],
+			cache: cache,
 			page: &PageData{
 				Page: pu,
 			},
@@ -90,12 +104,12 @@ func newPageDownload(urls []string) (dls []*download) {
 
 func newImageDownload(urls []string) (dls []*download) {
 	dls = make([]*download, len(urls))
-	for _, url := range urls {
-		dls = append(dls, &download{
-			url: url,
+	for i := range urls {
+		dls[i] = &download{
+			url: urls[i],
 			img: &Image{},
 			err: make(chan error, 1),
-		})
+		}
 	}
 	return dls
 }
@@ -182,31 +196,46 @@ func (j *downloader) downloadIterImage() iter.Seq2[Image, error] {
 	}
 }
 
-func partsDownloadHelper(pageUrls []string, pageNums []int) []string {
-	if len(pageNums) == 0 || len(pageUrls) == 0 {
-		return pageUrls
+func (j *downloader) downloadPage() ([]PageData, error) {
+	results := make([]PageData, 0, len(j.items))
+	for img, err := range j.downloadIterPage() {
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, img)
 	}
-	pageNums = removeDuplication(pageNums)              // 去重
-	pageNums = cleanOutOfRange(len(pageUrls), pageNums) // 越界检查
-	return rearrange(pageUrls, pageNums)                // 按页码重排 url
+	return results, nil
 }
 
-// initDownloadGalleryUrl
-// 获取画廊的所有页链接
-// , 根据设置尝试从元数据缓存或本地画廊缓存中获取
+func (j *downloader) downloadImage() ([]Image, error) {
+	results := make([]Image, 0, len(j.items))
+	for img, err := range j.downloadIterImage() {
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, img)
+	}
+	return results, nil
+}
+
+// initDownloadGallery
+// 获取画廊的所有页链接,
+// 根据设置尝试从元数据缓存或本地画廊缓存中获取
 //
-// 同时返回可用的本地缓存
+// 同时根据设置 返回可用的/创建新的 本地缓存
 //
 // 只有一个 gallery, len(cgs) 不会大于 1
-func initDownloadGalleryUrl(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, aCache map[int]*cacheGallery, err error) {
+func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, aCache map[int]*cacheGallery, err error) {
 	gId := UrlToGallery(galleryUrl).GalleryId
 
-	if cg := GetCache(gId); cg != nil {
+	cg := GetCache(gId)
+	mc := MetaCacheRead(gId)
+	if cg != nil {
 		pageUrls = pageUrlsToSlice(cg.meta.PageUrls)
 		aCache = make(map[int]*cacheGallery, 1)
 		aCache[gId] = cg
 
-	} else if mc := MetaCacheRead(gId); mc != nil && len(mc.pageUrls) != 0 {
+	} else if mc != nil && len(mc.pageUrls) != 0 {
 		pageUrls = mc.pageUrls
 	} else {
 		pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
@@ -215,13 +244,27 @@ func initDownloadGalleryUrl(ctx context.Context, galleryUrl string, pageNums ...
 		}
 	}
 
-	pageUrls = partsDownloadHelper(pageUrls, pageNums)
+	pageNums = removeDuplication(pageNums)                 // 去重
+	pageNums = cleanOutOfRange(len(pageUrls), pageNums)    // 越界检查
+	pageUrls = rearange(pageUrls, slicePlus(pageNums, -1)) // 按页码重排 url
+
+	if autoCacheEnabled && cg == nil {
+		// 创建缓存
+		cg, err = CreateCacheFromUrl(galleryUrl)
+		if err != nil {
+			return nil, nil, err
+		}
+		if cg != nil {
+			aCache = make(map[int]*cacheGallery, 1)
+			aCache[gId] = cg
+		}
+	}
 
 	return
 }
 
-// initDownloadPageUrls 返回可用的本地缓存
-func initDownloadPageUrls(pageUrls []string) (cgs map[int]*cacheGallery, err error) {
+// initDownloadPages 返回可用的本地缓存
+func initDownloadPages(pageUrls []string) (cgs map[int]*cacheGallery, err error) {
 	if len(pageUrls) == 0 {
 		return nil, wrapErr(ErrNoPageUrlProvided, nil)
 	}
@@ -240,11 +283,7 @@ func initDownloadPageUrls(pageUrls []string) (cgs map[int]*cacheGallery, err err
 
 // downloadImage 从图片直链下载
 func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
-	u, err := netUrl.Parse(imgUrl)
-	if err != nil {
-		return Image{}, err
-	}
-	resp, err := httpGet(ctx, u)
+	resp, err := httpGet(ctx, imgUrl)
 	if err != nil {
 		return Image{}, err
 	}
@@ -270,57 +309,8 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 	return Image{Data: data, Type: ParseImageType(contentTypeSplits[1])}, nil
 }
 
-// downloadImages 并发从图片直链下载
-func downloadImages(ctx context.Context, imgUrls []string) (imgs []Image, err error) {
-	if len(imgUrls) == 0 {
-		return nil, wrapErr(ErrNoImageUrlProvided, nil)
-	}
-
-	imgs = make([]Image, len(imgUrls))
-	errs := make(chan error, len(imgUrls))
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(imgUrls))
-
-	limiter := newLimiter()
-	defer limiter.close()
-
-	for i, url := range imgUrls {
-		limiter.acquire()
-		go func(i int) {
-			defer func() {
-				limiter.release()
-				wg.Done()
-			}()
-
-			data, err := downloadImage(ctx, url)
-			imgs[i] = data
-			errs <- err
-		}(i)
-	}
-
-	go func() {
-		wg.Wait()
-		close(errs)
-	}()
-
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := range imgs {
-		if len(imgs[i].Data) == 0 {
-			return nil, wrapErr(ErrFoundEmptyImageData, imgUrls[i])
-		}
-	}
-
-	return imgs, nil
-}
-
-// downloadPage 下载画廊某页的图片
-// , 下载失败时尝试备链
+// downloadPage 下载画廊某页的图片,
+// 下载失败时尝试备链
 func downloadPage(ctx context.Context, pageUrl string) (page PageData, err error) {
 	page = PageData{Page: UrlToPage(pageUrl)}
 	trys := 0
@@ -342,72 +332,6 @@ retry:
 	}
 	page.Image = img
 	return page, nil
-}
-
-// downloadPages 并发下载画廊某页的图片
-// , 下载失败时尝试备链
-// , 根据设置尝试从缓存获取
-func downloadPages(ctx context.Context, aCache map[int]*cacheGallery, pageUrls []string) (pageDatas []PageData, err error) {
-	if len(pageUrls) == 0 {
-		return nil, wrapErr(ErrNoPageUrlProvided, nil)
-	}
-
-	pageDatas = make([]PageData, len(pageUrls))
-	errs := make(chan error, len(pageUrls))
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(pageUrls))
-
-	limiter := newLimiter()
-	defer limiter.close()
-
-	for i, url := range pageUrls {
-		// try cache
-		if autoCacheEnabled || len(aCache) != 0 {
-			cache, ok := aCache[UrlToPage(url).GalleryId]
-			if ok {
-				pageData, err := cache.ReadByPageUrl(url)
-				if err != nil {
-					return nil, err
-				}
-				pageDatas[i] = pageData
-				wg.Done()
-				continue
-			}
-		}
-
-		// download
-		limiter.acquire()
-		go func(i int) {
-			defer func() {
-				limiter.release()
-				wg.Done()
-			}()
-
-			data, err := downloadPage(ctx, url)
-			pageDatas[i] = data
-			errs <- err
-		}(i)
-	}
-
-	go func() {
-		wg.Wait()
-		close(errs)
-	}()
-
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := range pageDatas {
-		if len(pageDatas[i].Data) == 0 {
-			return nil, wrapErr(ErrFoundEmptyImageData, pageUrls[i])
-		}
-	}
-
-	return pageDatas, nil
 }
 
 type limiter struct {

@@ -1,10 +1,8 @@
 package EHentai
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"io"
-	"net/http"
 )
 
 const API_URL = `https://api.e-hentai.org/api.php`
@@ -15,12 +13,13 @@ var (
 )
 
 // PostGalleryMetadata posts to the official API and returns gallery metadata
-func PostGalleryMetadata(g ...GIdList) (resp *GalleryMetadataResponse, err error) {
+func PostGalleryMetadata(ctx context.Context, g ...GIdList) (resp *GalleryMetadataResponse, err error) {
 	defer func() {
 		if resp != nil && err == nil {
 			// 缓存元数据
 			for _, g := range resp.GMetadata {
-				if g.Error != "" {
+				// 接口未返回错误时存入
+				if g.Error == "" {
 					metaCacheWrite(g.GId, &g, nil)
 				}
 			}
@@ -40,11 +39,11 @@ func PostGalleryMetadata(g ...GIdList) (resp *GalleryMetadataResponse, err error
 		reqBody.GIdList = append(reqBody.GIdList, []any{gallery.GalleryId, gallery.GalleryToken})
 	}
 
-	return post[GalleryMetadataResponse](API_URL, reqBody)
+	return post[GalleryMetadataResponse](ctx, API_URL, reqBody)
 }
 
 // PostGalleryToken posts to the official API and returns gallery token
-func PostGalleryToken(p ...PageList) (*GalleryTokenResponse, error) {
+func PostGalleryToken(ctx context.Context, p ...PageList) (*GalleryTokenResponse, error) {
 	if len(p) == 0 {
 		return nil, wrapErr(ErrNoPageProvided, nil)
 	}
@@ -57,32 +56,5 @@ func PostGalleryToken(p ...PageList) (*GalleryTokenResponse, error) {
 		reqBody.PageList = append(reqBody.PageList, []any{page.GalleryId, page.PageToken, page.PageNum})
 	}
 
-	return post[GalleryTokenResponse](API_URL, reqBody)
-}
-
-func post[T any](url string, body any) (*T, error) {
-	r, w := io.Pipe()
-	err := json.NewEncoder(w).Encode(body)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, r)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var respBody T
-	err = json.NewDecoder(resp.Body).Decode(&respBody)
-	if err != nil {
-		return nil, err
-	}
-
-	return &respBody, nil
+	return post[GalleryTokenResponse](ctx, API_URL, reqBody)
 }
