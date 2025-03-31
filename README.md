@@ -35,12 +35,15 @@ EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 ```go
 tStart := time.Now()
 // 在 AMD Ryzen 5600x(6c12t) 上, 解析数据大概耗时 4ms
-// 开了就关不掉了, 要更新的话再调用一次
+// 要更新的话再调用一次
 err := EHentai.InitEhTagDB()
 if err != nil {
     panic(err)
 }
 fmt.Printf("InitEhTagDB took %s\n", time.Since(tStart))
+
+// 释放数据库
+EHentai.FreeEhTagDB()
 ```
 
 ### 设置域名前置

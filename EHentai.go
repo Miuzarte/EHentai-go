@@ -103,7 +103,32 @@ func SetCacheDir(dir string) {
 
 // InitEhTagDB 初始化 EhTagTranslation 数据库
 func InitEhTagDB() error {
-	return database.Init()
+	return ehTagDatabase.Init()
+}
+
+// FreeEhTagDB 释放 EhTagTranslation 数据库
+func FreeEhTagDB() {
+	ehTagDatabase.Free()
+}
+
+// TranslateMulti 翻译多个 tag,
+// 输入格式应为: namespace:tag,
+// 若数据库未初始化, 则返回入参
+func TranslateMulti(tags []string) []string {
+	if !ehTagDatabase.Ok() {
+		return tags
+	}
+	return ehTagDatabase.TranslateMulti(tags)
+}
+
+// Translate 翻译 tag,
+// 输入格式应为: namespace:tag,
+// 若数据库未初始化, 则返回入参
+func Translate(tag string) string {
+	if !ehTagDatabase.Ok() {
+		return tag
+	}
+	return ehTagDatabase.Translate(tag)
 }
 
 // EHSearch 搜索 EHentai, results 只有第一页结果

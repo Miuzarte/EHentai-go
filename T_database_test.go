@@ -5,16 +5,16 @@ import (
 )
 
 func TestDatabaseInit(t *testing.T) {
-	err := database.Init()
+	err := ehTagDatabase.Init()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(database.Info())
-	t.Log(database["rows"])
+	t.Log(ehTagDatabase.Info())
+	t.Log(ehTagDatabase["rows"])
 }
 
 func TestTranslate(t *testing.T) {
-	database.Init()
+	ehTagDatabase.Init()
 	t.Log(Translate("language:chinese"))
 	t.Log(Translate("language:translated"))
 	t.Log(Translate("parody:original"))

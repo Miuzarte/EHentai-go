@@ -14,35 +14,19 @@ import (
 const DATABASE_URL = `https://github.com/EhTagTranslation/Database/releases/latest/download/db.text.json`
 
 // map[namespace]map[<tag>]name
-type Database map[string]map[string]string
+type EhTagDatabase map[string]map[string]string
 
-var database = make(Database)
+var ehTagDatabase = make(EhTagDatabase)
 
-// TranslateMulti 翻译多个 tag
-// , 输入格式应为: namespace:tag
-// , 若数据库未初始化, 则返回入参
-func TranslateMulti(tags []string) []string {
-	if !database.Ok() {
-		return tags
-	}
-	return database.TranslateMulti(tags)
-}
-
-// Translate 翻译 tag
-// , 输入格式应为: namespace:tag
-// , 若数据库未初始化, 则返回入参
-func Translate(tag string) string {
-	if !database.Ok() {
-		return tag
-	}
-	return database.Translate(tag)
-}
-
-func (db *Database) Ok() bool {
+func (db *EhTagDatabase) Ok() bool {
 	return len(*db) != 0
 }
 
-func (db *Database) Init() error {
+func (db *EhTagDatabase) Free() {
+	*db = make(EhTagDatabase)
+}
+
+func (db *EhTagDatabase) Init() error {
 	data, err := db.Download(DATABASE_URL)
 	if err != nil {
 		return err
@@ -58,7 +42,7 @@ func (db *Database) Init() error {
 	return nil
 }
 
-func (db *Database) Download(url string) ([]byte, error) {
+func (db *EhTagDatabase) Download(url string) ([]byte, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -74,7 +58,7 @@ func (db *Database) Download(url string) ([]byte, error) {
 	return data, nil
 }
 
-func (db *Database) Unmarshal(data []byte) error {
+func (db *EhTagDatabase) Unmarshal(data []byte) error {
 	jDataArr := gjson.ParseBytes(data).Get("data").Array()
 	if len(jDataArr) == 0 {
 		fs, err := os.Open("EhTagTranslation_dump.txt")
@@ -115,7 +99,7 @@ func (db *Database) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (db *Database) Info() map[string]int {
+func (db *EhTagDatabase) Info() map[string]int {
 	namespacesLen := make(map[string]int)
 	for namespace, tags := range *db {
 		namespacesLen[namespace] = len(tags)
@@ -123,7 +107,7 @@ func (db *Database) Info() map[string]int {
 	return namespacesLen
 }
 
-func (db *Database) TranslateMulti(tags []string) []string {
+func (db *EhTagDatabase) TranslateMulti(tags []string) []string {
 	t := make([]string, len(tags))
 	for i, tag := range tags {
 		t[i] = db.Translate(tag)
@@ -131,7 +115,7 @@ func (db *Database) TranslateMulti(tags []string) []string {
 	return t
 }
 
-func (db *Database) Translate(tag string) string {
+func (db *EhTagDatabase) Translate(tag string) string {
 	s := strings.Split(tag, ":")
 	if len(s) == 2 {
 		if name, ok := (*db)[s[0]][s[1]]; ok {
