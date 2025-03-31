@@ -1,0 +1,30 @@
+name: Manual Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go-version: ['1.21']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Run tests
+      env:
+        EHENTAI_DOMAIN_FRONTING: "false"
+      run: |
+        go test -v -run ^TestEH
+        go test -v -run ^TestEhTag
+        go test -v -run ^TestCache

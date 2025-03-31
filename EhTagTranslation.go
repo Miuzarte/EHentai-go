@@ -3,7 +3,6 @@ package EHentai
 import (
 	"errors"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -43,7 +42,7 @@ func (db *EhTagDatabase) Init() error {
 }
 
 func (db *EhTagDatabase) Download(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

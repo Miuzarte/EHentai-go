@@ -3,7 +3,6 @@ package EHentai
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 const (
@@ -67,7 +66,7 @@ func getCoverProviders(ctx context.Context) (providers []coverProvider, err erro
 	return
 }
 
-func TestPostGalleryMetadata(t *testing.T) {
+func TestEHApiPostGalleryMetadata(t *testing.T) {
 	resp, err := PostGalleryMetadata(t.Context(), GIdList{3138775, "30b0285f9b"})
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +74,7 @@ func TestPostGalleryMetadata(t *testing.T) {
 	t.Logf("%+v", *resp)
 }
 
-func TestPostGalleryToken(t *testing.T) {
+func TestEHApiPostGalleryToken(t *testing.T) {
 	resp, err := PostGalleryToken(t.Context(), PageList{"0b2127ea05", 3138775, 8})
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +113,7 @@ func TestEHSearchDetail(t *testing.T) {
 	}
 }
 
-func TestDownloadCovers(t *testing.T) {
+func TestEHDownloadCovers(t *testing.T) {
 	providers, err := getCoverProviders(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +133,7 @@ func TestDownloadCovers(t *testing.T) {
 	}
 }
 
-func TestDownloadGallery(t *testing.T) {
+func TestEHDownloadGallery(t *testing.T) {
 	n := 0
 	for page, err := range DownloadGalleryIter(t.Context(), TEST_GALLERY_URL, TEST_GALLERY_PAGE_0, TEST_GALLERY_PAGE_1) {
 		n++
@@ -151,7 +150,7 @@ func TestDownloadGallery(t *testing.T) {
 	}
 }
 
-func TestDownloadPages(t *testing.T) {
+func TestEHDownloadPages(t *testing.T) {
 	n := 0
 	for page, err := range DownloadPagesIter(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
 		n++
@@ -168,7 +167,7 @@ func TestDownloadPages(t *testing.T) {
 	}
 }
 
-func TestFetchGalleryPageUrls(t *testing.T) {
+func TestEHFetchGalleryPageUrls(t *testing.T) {
 	pageUrls, err := FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
@@ -179,97 +178,5 @@ func TestFetchGalleryPageUrls(t *testing.T) {
 
 	for _, pageUrl := range pageUrls {
 		t.Log(pageUrl)
-	}
-}
-
-func TestMetaCache(t *testing.T) {
-	gMetaCache = newRamCache[int, metaCache](cacheTimeout)
-	metadataCacheEnabled = true
-	var err error
-	var resp *GalleryMetadataResponse
-	var pageUrls []string
-	resp, err = PostGalleryMetadata(t.Context(), GIdList{TEST_GALLERY_GID, TEST_GALLERY_GTOKEN})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(resp.GMetadata) == 0 {
-		t.Fatal("len(resp.GMetadata) == 0")
-	}
-	pageUrls, err = fetchGalleryPages(t.Context(), TEST_GALLERY_URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pageUrls) == 0 {
-		t.Fatal("len(pageUrls) == 0")
-	}
-
-	mc := MetaCacheRead(TEST_GALLERY_GID)
-	if mc == nil {
-		t.Fatal("nil meta cache")
-	}
-	if mc.gallery == nil {
-		t.Fatal("nil meta cache.gallery")
-	}
-	if len(mc.pageUrls) == 0 {
-		t.Fatal("empty meta cache.pageUrls")
-	}
-	if mc.gallery.GId != TEST_GALLERY_GID {
-		t.Fatalf("meta cache.gallery.GId != %d\n", TEST_GALLERY_GID)
-	}
-}
-
-func TestGalleryCache(t *testing.T) {
-	defer func() {
-		_ = DeleteCache(TEST_GALLERY_GID)
-	}()
-
-	SetDomainFronting(true)
-	autoCacheEnabled = true
-	var cache *cacheGallery
-
-	// download [TEST_GALLERY_URL]
-	// : [TEST_GALLERY_PAGE_0], [TEST_GALLERY_PAGE_1]
-	// (write cache)
-	for page, err := range DownloadGalleryIter(t.Context(), TEST_GALLERY_URL, TEST_GALLERY_PAGE_0, TEST_GALLERY_PAGE_1) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Log(page.String())
-	}
-
-	// 缓存的写入是异步的, 等待元数据更新
-	<-time.After(time.Second)
-	cache = GetCache(TEST_GALLERY_GID)
-	if cache == nil {
-		t.Fatal("nil cache")
-	}
-	// cache pages == 2
-	if cache.meta.Files.Count != 2 {
-		t.Fatal("cache.meta.Files.Count != 2")
-	}
-	for i, page := range cache.meta.Files.Pages {
-		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
-	}
-
-	// download [TEST_PAGE_URL_0], [TEST_PAGE_URL_1]
-	// (write cache)
-	for page, err := range DownloadPagesIter(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Log(page.String())
-	}
-
-	<-time.After(time.Second)
-	cache = GetCache(TEST_GALLERY_GID)
-	if cache == nil {
-		t.Fatal("nil cache")
-	}
-	// cache pages == 4
-	if cache.meta.Files.Count != 4 {
-		t.Fatal("cache.meta.Files.Count != 4")
-	}
-	for i, page := range cache.meta.Files.Pages {
-		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
 	}
 }

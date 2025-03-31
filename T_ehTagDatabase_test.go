@@ -9,6 +9,13 @@ func TestEhTagInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(ehTagDatabase) == 0 {
+		t.Fatal("empty database")
+	}
+	if len(ehTagDatabase["rows"]) == 0 {
+		t.Fatal("empty rows")
+	}
+
 	t.Log(ehTagDatabase.Info())
 	t.Log(ehTagDatabase["rows"])
 }

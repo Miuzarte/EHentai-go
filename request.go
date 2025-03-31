@@ -13,7 +13,7 @@ import (
 
 var domainFrontingInterceptor = &DomainFrontingInterceptor{
 	Enabled: false,
-	IpProvider: &EhRoundRobinIpProvider{
+	IpProvider: &EHRoundRobinIpProvider{
 		host2Ips:       make(map[string][]string),
 		ipsIndex:       make(map[string]int),
 		unavailableIps: make(map[string]time.Time),
@@ -254,15 +254,15 @@ func (d *DomainFrontingInterceptor) OnError(req *http.Request, err error) {
 //
 // 全都不可用时, NextIp 也应返回下一个 ip
 //
-// Implemented by [EhRoundRobinIpProvider]
+// Implemented by [EHRoundRobinIpProvider]
 type IpProvider interface {
 	Supports(host string) bool
 	NextIp(host string) string
 	AddUnavailableIp(host, ip string)
 }
 
-// EhRoundRobinIpProvider 用于轮询提供 e-hentai 相关域名的 ip
-type EhRoundRobinIpProvider struct {
+// EHRoundRobinIpProvider 用于轮询提供 e-hentai 相关域名的 ip
+type EHRoundRobinIpProvider struct {
 	host2Ips map[string][]string
 	ipsIndex map[string]int
 	mu1      sync.RWMutex
@@ -272,7 +272,7 @@ type EhRoundRobinIpProvider struct {
 }
 
 // h2IpsCopyFrom 复制 m 的内容到 p.host2Ips, 避免外部修改
-func (p *EhRoundRobinIpProvider) h2IpsCopyFrom(m map[string][]string) {
+func (p *EHRoundRobinIpProvider) h2IpsCopyFrom(m map[string][]string) {
 	p.mu1.Lock()
 	p.mu2.Lock()
 	defer p.mu1.Unlock()
@@ -300,14 +300,14 @@ func (p *EhRoundRobinIpProvider) h2IpsCopyFrom(m map[string][]string) {
 	p.unavailableIps = make(map[string]time.Time)
 }
 
-func (p *EhRoundRobinIpProvider) Supports(host string) bool {
+func (p *EHRoundRobinIpProvider) Supports(host string) bool {
 	p.mu1.RLock()
 	defer p.mu1.RUnlock()
 	ips, ok := p.host2Ips[host]
 	return ok && len(ips) > 0
 }
 
-func (p *EhRoundRobinIpProvider) NextIp(host string) (ip string) {
+func (p *EHRoundRobinIpProvider) NextIp(host string) (ip string) {
 	p.mu1.Lock()
 	defer p.mu1.Unlock()
 
@@ -327,7 +327,7 @@ func (p *EhRoundRobinIpProvider) NextIp(host string) (ip string) {
 	return ip
 }
 
-func (p *EhRoundRobinIpProvider) AddUnavailableIp(host, ip string) {
+func (p *EHRoundRobinIpProvider) AddUnavailableIp(host, ip string) {
 	p.mu2.Lock()
 	defer p.mu2.Unlock()
 	_ = host // 这里用不到

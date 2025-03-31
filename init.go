@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"os"
+	"strconv"
 )
 
 const (
@@ -13,6 +14,8 @@ const (
 	ENV_COOKIE_IPB_PASS_HASH = "EHENTAI_COOKIE_IPB_PASS_HASH"
 	ENV_COOKIE_IGNEOUS       = "EHENTAI_COOKIE_IGNEOUS"
 	ENV_COOKIE_SK            = "EHENTAI_COOKIE_SK"
+
+	ENV_DOMAIN_FRONTING = "EHENTAI_DOMAIN_FRONTING"
 )
 
 //go:embed embed/*
@@ -31,11 +34,12 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	domainFrontingInterceptor.IpProvider.(*EhRoundRobinIpProvider).h2IpsCopyFrom(host2Ips)
+	domainFrontingInterceptor.IpProvider.(*EHRoundRobinIpProvider).h2IpsCopyFrom(host2Ips)
 }
 
-// 从环境变量读取 cookie
+// 读取环境变量
 func init() {
+	// cookie
 	ehCookie, ok := os.LookupEnv(ENV_COOKIE)
 	if ok {
 		Cookie.fromString(ehCookie)
@@ -44,5 +48,11 @@ func init() {
 		Cookie.ipbPassHash = os.Getenv(ENV_COOKIE_IPB_PASS_HASH)
 		Cookie.igneous = os.Getenv(ENV_COOKIE_IGNEOUS)
 		Cookie.sk = os.Getenv(ENV_COOKIE_SK)
+	}
+
+	// 域名前置, 方便测试
+	dfEnabled, err := strconv.ParseBool(os.Getenv(ENV_DOMAIN_FRONTING))
+	if err != nil {
+		domainFrontingInterceptor.Enabled = dfEnabled
 	}
 }
