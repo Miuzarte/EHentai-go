@@ -3,6 +3,7 @@ package EHentai
 import (
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -42,7 +43,9 @@ func (db *EhTagDatabase) Init() error {
 }
 
 func (db *EhTagDatabase) Download(url string) ([]byte, error) {
-	resp, err := httpClient.Get(url)
+	// 不使用受外部控制的 [httpClient],
+	// 避免走不到代理
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}

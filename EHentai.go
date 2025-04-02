@@ -3,6 +3,7 @@ package EHentai
 import (
 	"context"
 	"iter"
+	"net/http"
 )
 
 var (
@@ -50,7 +51,21 @@ func SetInterceptors(interceptors ...Interceptor) {
 
 // SetThreads 设置下载并发数
 func SetThreads(n int) {
+	if n <= 0 {
+		n = 1
+	}
 	threads = n
+}
+
+// SetUseEnvPorxy 设置是否使用系统环境变量中的代理
+//
+// 默认为 true
+func SetUseEnvPorxy(b bool) {
+	if b {
+		defaultRoundTripper.Proxy = http.ProxyFromEnvironment
+	} else {
+		defaultRoundTripper.Proxy = nil
+	}
 }
 
 // SetRetryDepth 设置重试次数
@@ -132,45 +147,35 @@ func Translate(tag string) string {
 }
 
 // EHSearch 搜索 EHentai, results 只有第一页结果
-func EHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
+func EHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
 	return queryFSearch(ctx, EHENTAI_URL, keyword, categories...)
 }
 
 // ExHSearch 搜索 ExHentai, results 只有第一页结果
-func ExHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
+func ExHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
 	return queryFSearch(ctx, EXHENTAI_URL, keyword, categories...)
 }
 
 // EHSearchDetail 搜索 EHentai 并返回详细信息, galleries 只有第一页结果
-func EHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
+func EHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
 	return searchDetail(ctx, EHENTAI_URL, keyword, categories...)
 }
 
 // ExHSearchDetail 搜索 ExHentai 并返回详细信息, galleries 只有第一页结果
-func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
+func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
 	return searchDetail(ctx, EXHENTAI_URL, keyword, categories...)
 }
 
 // DownloadCoversIter 以迭代器模式通过搜索结果下载封面
-func DownloadCoversIter(ctx context.Context, results ...coverProvider) iter.Seq2[Image, error] {
-	urls := make([]string, len(results))
-	for i := range results {
-		urls[i] = results[i].GetCover()
-	}
-
-	job := newDownloader(ctx, newImageDownload(urls))
+func DownloadCoversIter(ctx context.Context, results coverProviders) iter.Seq2[Image, error] {
+	job := newDownloader(ctx, newImageDownload(results.GetCover()))
 	job.startBackground()
 	return job.downloadIterImage()
 }
 
 // DownloadCovers 通过搜索结果下载封面
-func DownloadCovers(ctx context.Context, results ...coverProvider) ([]Image, error) {
-	urls := make([]string, len(results))
-	for i := range results {
-		urls[i] = results[i].GetCover()
-	}
-
-	job := newDownloader(ctx, newImageDownload(urls))
+func DownloadCovers(ctx context.Context, results coverProviders) ([]Image, error) {
+	job := newDownloader(ctx, newImageDownload(results.GetCover()))
 	job.startBackground()
 	return job.downloadImage()
 }

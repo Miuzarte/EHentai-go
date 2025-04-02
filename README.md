@@ -68,6 +68,14 @@ EHentai.SetCustomIpProvider(IpProvider(nil))
 EHentai.SetThreads(4)
 ```
 
+### 设置是否使用系统环境变量中的代理
+
+```go
+// 默认为 true
+// 配合域名前置食用
+EHentai.SetUseEnvPorxy(true)
+```
+
 ### 设置 query nl 的重试次数
 
 ```go

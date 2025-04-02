@@ -70,7 +70,7 @@ func TestCacheLocalGallery(t *testing.T) {
 		t.Fatal("cache.meta.Files.Count != 2")
 	}
 	for i, page := range cache.meta.Files.Pages {
-		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
+		t.Logf("cache.meta.PageUrls[%d] = %v", i, page)
 	}
 
 	// download [TEST_PAGE_URL_0], [TEST_PAGE_URL_1]
@@ -92,6 +92,6 @@ func TestCacheLocalGallery(t *testing.T) {
 		t.Fatal("cache.meta.Files.Count != 4")
 	}
 	for i, page := range cache.meta.Files.Pages {
-		t.Logf("cache.meta.PageUrls[%d]= %v", i, page)
+		t.Logf("cache.meta.PageUrls[%d] = %v", i, page)
 	}
 }

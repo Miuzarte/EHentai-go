@@ -115,8 +115,14 @@ type GalleryMetadata struct {
 	Error        string    `json:"error,omitzero"`
 }
 
-func (gm *GalleryMetadata) GetCover() (url string) {
-	return gm.Thumb
+type GalleryMetadatas []GalleryMetadata
+
+func (gm GalleryMetadatas) GetCover() (urls []string) {
+	urls = make([]string, len(gm))
+	for i := range gm {
+		urls[i] = (gm)[i].Thumb
+	}
+	return urls
 }
 
 type GalleryMetadataResponse struct {
@@ -145,6 +151,13 @@ type TokenList struct {
 	Token string `json:"token"`
 }
 
+func (tl *TokenList) ToGallery() Gallery {
+	return Gallery{
+		GalleryId:    tl.GId,
+		GalleryToken: tl.Token,
+	}
+}
+
 type GalleryTokenResponse struct {
 	TokenLists []TokenList `json:"tokenlist"`
 }
@@ -170,9 +183,9 @@ func (p *Page) String() string {
 // PageList is the official alias of [Page]
 type PageList = Page
 
-// coverProvider 统一搜索结果与元数据结果的封面获取
-type coverProvider interface {
-	GetCover() (url string)
+// coverProviders 统一搜索结果与元数据结果的封面获取
+type coverProviders interface {
+	GetCover() (urls []string)
 }
 
 type FSearchResult struct {
@@ -188,8 +201,14 @@ type FSearchResult struct {
 	Pages  string
 }
 
-func (f *FSearchResult) GetCover() (url string) {
-	return f.Cover
+type FSearchResults []FSearchResult
+
+func (fsr FSearchResults) GetCover() (urls []string) {
+	urls = make([]string, len(fsr))
+	for i := range fsr {
+		urls[i] = (fsr)[i].Cover
+	}
+	return urls
 }
 
 type Image struct {
@@ -205,6 +224,7 @@ func (i *Image) String() string {
 type PageData struct {
 	Page
 	Image
+	FromCache bool
 }
 
 func (pd *PageData) String() string {
@@ -286,8 +306,9 @@ type CacheGalleryMetadata struct {
 	PageUrls map[string]string `json:"page_urls"`
 
 	Files struct {
-		Dir   string         `json:"dir"`   // 画廊路径 `root/gid/`
-		Count int            `json:"count"` // 缓存数量
-		Pages CachePageInfos `json:"pages"` // 缓存的页码列表
+		Dir      string         `json:"dir"`       // 画廊路径 `root/gid/`
+		Count    int            `json:"count"`     // 缓存数量
+		TotalLen int            `json:"total_len"` // 缓存总大小
+		Pages    CachePageInfos `json:"pages"`     // 缓存的页码列表
 	} `json:"files"` // 缓存文件列表
 }

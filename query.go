@@ -92,7 +92,7 @@ var (
 // Found 1 result.
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
-func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries []GalleryMetadata, err error) {
+func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
 	total, results, err := queryFSearch(ctx, url, keyword, categories...)
 	if err != nil {
 		return
@@ -109,7 +109,7 @@ func searchDetail(ctx context.Context, url, keyword string, categories ...Catego
 }
 
 // total != len(results) 即不止一页
-func queryFSearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results []FSearchResult, err error) {
+func queryFSearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err
@@ -158,7 +158,7 @@ func queryFSearch(ctx context.Context, url, keyword string, categories ...Catego
 	if tableLen == 0 {
 		return 0, nil, wrapErr(ErrEmptyTable, foundResults)
 	}
-	results = make([]FSearchResult, 0, tableLen-1)
+	results = make(FSearchResults, 0, tableLen-1)
 	table.Each(func(i int, s *goquery.Selection) {
 		if i == 0 { // 表头
 			return

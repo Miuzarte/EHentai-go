@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // TODO: 在 [os.Root] 得到完善后改用
@@ -137,6 +139,7 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cach
 
 	cgm.Files.Dir = gDir
 	cgm.Files.Count = 0
+	cgm.Files.TotalLen = 0
 	cgm.Files.Pages = []CachePageInfo{}
 
 	defer func() {
@@ -147,7 +150,7 @@ func CreateCache(domain Domain, gMeta *GalleryMetadata, pageUrls []string) (cach
 	}()
 
 	cache = &cacheGallery{meta: cgm}
-	err = cache.mkdir()
+	err = os.MkdirAll(cache.meta.Files.Dir, 0o755)
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +192,12 @@ func DeleteCache(gId int) (err error) {
 type cacheGallery struct {
 	meta   *CacheGalleryMetadata
 	metaMu sync.Mutex // 保护 [CacheGalleryMetadata].Files.Pages
-}
 
-func (cg *cacheGallery) mkdir() error {
-	return os.MkdirAll(cg.meta.Files.Dir, 0o755)
+	updaterRunning   atomic.Bool
+	updaterIdleTimer *time.Timer
+
+	updateChan  chan struct{}
+	updateTimer *time.Timer
 }
 
 func (cg *cacheGallery) updateMetadata() error {
@@ -212,6 +217,10 @@ func (cg *cacheGallery) updateMetadata() error {
 		},
 	)
 	cg.meta.Files.Count = len(cg.meta.Files.Pages)
+	cg.meta.Files.TotalLen = 0
+	for i := range cg.meta.Files.Pages {
+		cg.meta.Files.TotalLen += cg.meta.Files.Pages[i].Len
+	}
 
 	// 具体验证文件数量
 	if cg.meta.Files.Count > 0 {
@@ -242,15 +251,35 @@ func (cg *cacheGallery) updateMetadata() error {
 	defer f.Close()
 
 	enc := json.NewEncoder(f)
-	enc.SetIndent("", "    ")
+	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	return enc.Encode(cg.meta)
 }
 
+// metadataUpdater 根据需求更新元数据
+func (cg *cacheGallery) metadataUpdater() {
+	defer cg.updaterRunning.Store(false)
+
+	cg.updateTimer = time.NewTimer(5 * time.Second)
+	cg.updaterIdleTimer = time.NewTimer(time.Minute)
+
+	for {
+		select {
+		case <-cg.updateChan: // 频繁写入, 重置计时器
+			cg.updateTimer.Reset(5 * time.Second)
+			cg.updaterIdleTimer.Reset(time.Minute)
+
+		case <-cg.updateTimer.C: // 空闲 5s 后更新
+			cg.updateMetadata()
+
+		case <-cg.updaterIdleTimer.C: // 空闲一分钟后释放
+			return
+		}
+	}
+}
+
 // Write 将画廊图片写入缓存
 func (cg *cacheGallery) Write(pages ...PageData) (n int, err error) {
-	defer cg.updateMetadata() // 更新元数据
-
 	for _, page := range pages {
 		if page.PageNum <= 0 {
 			return n, wrapErr(ErrInvalidPageNum, page.PageNum)
@@ -268,11 +297,20 @@ func (cg *cacheGallery) Write(pages ...PageData) (n int, err error) {
 
 		cg.metaMu.Lock()
 		cg.meta.Files.Pages.append(pageInfo)
-		cg.meta.Files.Count = len(cg.meta.Files.Pages)
 		cg.metaMu.Unlock()
 
 		n++
 	}
+
+	// 需要写入时启动 updaters
+	if cg.updaterRunning.CompareAndSwap(false, true) {
+		go cg.metadataUpdater()
+	}
+	// 通知更新元数据
+	if cg.updateChan == nil {
+		cg.updateChan = make(chan struct{}, 1)
+	}
+	cg.updateChan <- struct{}{}
 
 	return n, nil
 }
@@ -323,6 +361,7 @@ func (cg *cacheGallery) readOne(pageInfo CachePageInfo) (pageData PageData, err 
 		return
 	}
 	pageData.Image = Image{Data: data, Type: ImageType(pageInfo.Type)}
+	pageData.FromCache = true
 
 	return pageData, nil
 }

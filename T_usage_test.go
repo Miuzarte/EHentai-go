@@ -63,6 +63,13 @@ func UsageSetThreads(t *testing.T) {
 	SetThreads(4)
 }
 
+// 设置是否使用系统环境变量中的代理
+func UsageSetUseEnvPorxy(t *testing.T) {
+	// 默认为 true
+	// 配合域名前置食用
+	SetUseEnvPorxy(true)
+}
+
 // 设置 query nl 的重试次数
 func UsageSetRetryDepth(t *testing.T) {
 	// 默认只尝试两次

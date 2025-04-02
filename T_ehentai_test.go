@@ -26,7 +26,7 @@ var (
 	searchDetailResults []GalleryMetadata
 )
 
-func getSearch(ctx context.Context) (total int, results []FSearchResult, err error) {
+func getSearch(ctx context.Context) (total int, results FSearchResults, err error) {
 	if searchTotal != 0 && len(searchResults) != 0 {
 		return searchTotal, searchResults, nil
 	}
@@ -51,18 +51,6 @@ func getSearchDetail(ctx context.Context) (total int, results []GalleryMetadata,
 
 	searchDetailTotal = total
 	searchDetailResults = results
-	return
-}
-
-func getCoverProviders(ctx context.Context) (providers []coverProvider, err error) {
-	_, results, err := getSearch(ctx)
-	if err != nil {
-		return
-	}
-
-	for _, r := range results {
-		providers = append(providers, &r)
-	}
 	return
 }
 
@@ -114,15 +102,12 @@ func TestEHSearchDetail(t *testing.T) {
 }
 
 func TestEHDownloadCovers(t *testing.T) {
-	providers, err := getCoverProviders(t.Context())
+	_, results, err := getSearch(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(providers) == 0 {
-		t.Fatal("empty providers")
-	}
 
-	for img, err := range DownloadCoversIter(t.Context(), providers...) {
+	for img, err := range DownloadCoversIter(t.Context(), results) {
 		if err != nil {
 			t.Fatal(err)
 		}
