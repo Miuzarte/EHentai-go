@@ -23,9 +23,10 @@ func UnwrapErr(err error) *Error {
 
 // Error 附带了更详细的信息
 //
-// ehErr := EHentai.UnwarpErr(err)
+//	ehErr := EHentai.UnwarpErr(err)
+//	isXxx := ehErr.Is(EHentai.ErrXXX)
 //
-// isXxx := ehErr.Is(ErrXXX)
+// -
 type Error struct {
 	raw    error
 	detail any
@@ -39,6 +40,13 @@ func (e *Error) Error() string {
 		return fmt.Sprintf("%s: %v", e.raw.Error(), e.detail)
 	}
 	return e.raw.Error()
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.raw
 }
 
 func (e *Error) Is(target error) bool {
