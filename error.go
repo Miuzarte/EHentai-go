@@ -18,7 +18,7 @@ func UnwrapErr(err error) *Error {
 	if e, ok := err.(*Error); ok {
 		return e
 	}
-	return nil
+	return &Error{raw: err}
 }
 
 // Error 附带了更详细的信息
