@@ -7,7 +7,7 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 ## Features
 
 - 完全并发, 可配置并发数
-- 集成 [EhTagTranslation](github.com/EhTagTranslation/Database)
+- 集成 [EhTagTranslation](https://github.com/EhTagTranslation/Database)
 - 指定下载画廊的某(几)页
 - 本地画廊缓存
 - 域名前置
@@ -17,6 +17,7 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 ### 设置 Cookie (初始化时会尝试读取环境变量)
 
 ```go
+// 环境变量:
 // "EHENTAI_COOKIE"
 // OR
 // "EHENTAI_COOKIE_IPB_MEMBER_ID"
@@ -30,7 +31,7 @@ EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 // EHentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
 ```
 
-### 初始化 [EhTagTranslation](github.com/EhTagTranslation/Database) 数据库
+### 初始化 [EhTagTranslation](https://github.com/EhTagTranslation/Database) 数据库
 
 ```go
 tStart := time.Now()
@@ -47,6 +48,8 @@ EHentai.FreeEhTagDB()
 ```
 
 ### 设置域名前置
+
+抄的[jiangtian616/JHenTai](https://github.com/jiangtian616/JHenTai)
 
 ```go
 // 默认为 false
@@ -201,4 +204,4 @@ for _, pageUrl := range pageUrls {
 
 ### 自行管理缓存
 
-见 [T_usage_test.go:UsageManageCache](T_usage_test.go#L160)
+见 [T_usage_test.go:UsageManageCache](T_usage_test.go#L192)
