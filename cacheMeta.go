@@ -100,26 +100,26 @@ func (mc *metaCache) match() bool {
 	return fileCount == len(mc.pageUrls)
 }
 
-type ramCache[K comparable, T any, PT *T] struct {
+type ramCache[K comparable, T any] struct {
 	timeout time.Duration
 	sync.RWMutex
 	m map[K]*struct {
 		t time.Time
-		v PT
+		v *T
 	}
 }
 
-func newRamCache[K comparable, T any, PT *T](timeout time.Duration) ramCache[K, T, PT] {
-	return ramCache[K, T, PT]{
+func newRamCache[K comparable, T any](timeout time.Duration) ramCache[K, T] {
+	return ramCache[K, T]{
 		timeout: timeout,
 		m: make(map[K]*struct {
 			t time.Time
-			v PT
+			v *T
 		}),
 	}
 }
 
-func (rc *ramCache[K, T, PT]) get(k K) PT {
+func (rc *ramCache[K, T]) get(k K) *T {
 	rc.RLock()
 	defer rc.RUnlock()
 	if v, ok := rc.m[k]; ok {
@@ -132,16 +132,16 @@ func (rc *ramCache[K, T, PT]) get(k K) PT {
 	return nil
 }
 
-func (rc *ramCache[K, T, PT]) set(k K, v PT) {
+func (rc *ramCache[K, T]) set(k K, v *T) {
 	rc.Lock()
 	defer rc.Unlock()
 	rc.m[k] = &struct {
 		t time.Time
-		v PT
+		v *T
 	}{time.Now(), v}
 }
 
-func (rc *ramCache[K, T, PT]) clean() {
+func (rc *ramCache[K, T]) clean() {
 	rc.Lock()
 	defer rc.Unlock()
 	for k, v := range rc.m {
