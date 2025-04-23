@@ -196,13 +196,21 @@ func UsageManageCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	gUrl := "https://e-hentai.org/g/3138775/30b0285f9b"
-	domain := urlGetDomain(gUrl)
+	const gUrl = "https://e-hentai.org/g/3138775/30b0285f9b"
+	gallery := UrlToGallery(gUrl)
 
-	var gallery *GalleryMetadata
+	var gMeta *GalleryMetadata
 	var pageUrls []string
 
-	cache, err := CreateCache(domain, gallery, pageUrls)
+	resp, err := PostGalleryMetadata(ctx, gallery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gMeta = &resp.GMetadata[0]
+	// gMeta 中没有域名信息所以需要单独传
+	// gMeta 画廊元数据不可为空
+	// pageUrls 为空时会自动获取
+	cache, err := CreateCache(EHENTAI_DOMAIN, gMeta, pageUrls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +231,7 @@ func UsageManageCache(t *testing.T) {
 		}
 	}
 
-	// 也可以直接从 url 创建, 效果是一样的
+	// 也可以直接从 url 创建, 省去手动获取画廊元数据
 	cache, err = CreateCacheFromUrl(gUrl)
 	if err != nil {
 		t.Fatal(err)
@@ -272,5 +280,5 @@ func UsageManageCache(t *testing.T) {
 	cache.DeletePages([]int{4, 5, 6})
 
 	// 删除整个画廊缓存, 包括元数据
-	DeleteCache(cache.meta.Gallery.GId)
+	DeleteCache(UrlToGallery(gUrl).GalleryId)
 }
