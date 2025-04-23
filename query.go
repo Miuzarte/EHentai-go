@@ -286,7 +286,12 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 	defer limiter.close()
 
 	for page := range pages {
-		limiter.acquire()
+		select {
+		case <-ctx.Done():
+			return
+		case limiter.acquire() <- struct{}{}:
+		}
+
 		go func(page int) {
 			defer func() {
 				limiter.release()

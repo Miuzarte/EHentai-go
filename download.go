@@ -30,18 +30,6 @@ type download struct {
 	err   chan error
 }
 
-func (dl *download) done() bool {
-	switch {
-	case dl.page != nil:
-		return len(dl.page.Data) != 0
-	case dl.img != nil:
-		return len(dl.img.Data) != 0
-
-	default:
-		panic(ErrDownloadUnreachableCase)
-	}
-}
-
 func (dl *download) start(ctx context.Context) {
 	var err error
 	defer func() { dl.err <- err }()
@@ -137,13 +125,21 @@ func (j *downloader) startBackground() {
 
 	go func() {
 		limiter := newLimiter()
+		defer limiter.close()
+
 		for _, item := range j.items {
-			if item.done() {
-				close(item.err)
-				continue
+			select {
+			case <-j.ctx.Done():
+				return
+			case limiter.acquire() <- struct{}{}:
 			}
 
-			limiter.acquire()
+			// no more resumable
+			// if item.done() {
+			// 	close(item.err)
+			// 	continue
+			// }
+
 			go func() {
 				defer limiter.release()
 				item.start(j.ctx)
@@ -162,12 +158,7 @@ func (j *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 		}
 
 		for _, item := range j.items {
-			err, ok := <-item.err
-			if !ok {
-				continue
-			}
-
-			if !yield(*item.page, err) {
+			if !yield(*item.page, <-item.err) {
 				return
 			}
 		}
@@ -345,8 +336,8 @@ func newLimiter() *limiter {
 	}
 }
 
-func (l *limiter) acquire() {
-	l.sem <- struct{}{}
+func (l *limiter) acquire() chan<- struct{} {
+	return l.sem
 }
 
 func (l *limiter) release() {
