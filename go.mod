@@ -13,4 +13,3 @@ require (
 	github.com/tidwall/pretty v1.2.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 )
-

@@ -14,6 +14,47 @@ var (
 
 type set[T comparable] map[T]struct{}
 
+func (set *set[T]) Add(v ...T) {
+	for _, val := range v {
+		(*set)[val] = struct{}{}
+	}
+}
+
+func (set *set[T]) Delete(v ...T) {
+	for _, val := range v {
+		delete(*set, val)
+	}
+}
+
+// Get 不保证顺序
+func (set *set[T]) Get() (s []T) {
+	s = make([]T, len(*set))
+	i := 0
+	for val := range *set {
+		s[i] = val
+		i++
+	}
+	return
+}
+
+func (set *set[T]) Ok(v T) bool {
+	_, ok := (*set)[v]
+	return ok
+}
+
+// Clean 能保证顺序
+func (set *set[T]) Clean(s []T) []T {
+	write := 0
+	for read := range s {
+		if !set.Ok(s[read]) {
+			(*set)[s[read]] = struct{}{}
+			s[write] = s[read]
+			write++
+		}
+	}
+	return s[:write]
+}
+
 type ImageType int
 
 const (
@@ -238,6 +279,15 @@ type CachePageInfo struct {
 }
 
 type CachePageInfos []CachePageInfo
+
+// Exts 返回存在的图片扩展名
+func (cpi *CachePageInfos) Exts() []ImageType {
+	set := make(set[ImageType])
+	for _, pageInfo := range *cpi {
+		set.Add(ImageType(pageInfo.Type))
+	}
+	return set.Get()
+}
 
 // Get 返回页码对应的缓存信息
 //

@@ -161,23 +161,6 @@ func ipBannedCheck(doc *goquery.Document) bool {
 	return strings.Contains(doc.Find("body").Text(), "This IP address has been temporarily banned")
 }
 
-func removeDuplication[T comparable](s []T) []T {
-	if len(s) == 0 {
-		return s
-	}
-
-	m := make(set[T], len(s))
-	d := make([]T, 0, len(s))
-	for i := range s {
-		if _, ok := m[s[i]]; ok {
-			continue
-		}
-		m[s[i]] = struct{}{}
-		d = append(d, s[i])
-	}
-	return d
-}
-
 func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	if len(indexes) == 0 ||
 		slices.Max(indexes) < sLen && slices.Min(indexes) >= 0 {

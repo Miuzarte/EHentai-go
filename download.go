@@ -235,7 +235,8 @@ func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int
 		}
 	}
 
-	pageNums = removeDuplication(pageNums)                 // 去重
+	set := make(set[int])
+	pageNums = set.Clean(pageNums)                         // 去重
 	pageNums = cleanOutOfRange(len(pageUrls), pageNums)    // 越界检查
 	pageUrls = rearange(pageUrls, slicePlus(pageNums, -1)) // 按页码重排 url
 

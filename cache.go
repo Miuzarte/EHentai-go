@@ -202,7 +202,8 @@ type cacheGallery struct {
 
 func (cg *cacheGallery) updateMetadata() error {
 	// 去重 排序 计数
-	cg.meta.Files.Pages = removeDuplication(cg.meta.Files.Pages)
+	st := make(set[CachePageInfo])
+	cg.meta.Files.Pages = st.Clean(cg.meta.Files.Pages)
 	slices.SortFunc(
 		cg.meta.Files.Pages,
 		func(a, b CachePageInfo) int {
@@ -224,19 +225,15 @@ func (cg *cacheGallery) updateMetadata() error {
 
 	// 具体验证文件数量
 	if cg.meta.Files.Count > 0 {
-		pageExts := make(set[string])
-		for _, pageInfo := range cg.meta.Files.Pages {
-			pageExts[ImageType(pageInfo.Type).String()] = struct{}{}
-		}
-		exts := make([]string, 0, len(pageExts))
-		for ext := range pageExts {
-			exts = append(exts, ext)
-		}
 		dir, err := os.ReadDir(cg.meta.Files.Dir)
 		if err != nil {
 			return err
 		}
-		pageFiles := dirLookupExt(dir, exts...)
+		pageExts := make(set[string])
+		for _, pageInfo := range cg.meta.Files.Pages {
+			pageExts.Add(ImageType(pageInfo.Type).String())
+		}
+		pageFiles := dirLookupExt(dir, pageExts.Get()...)
 		if len(pageFiles) != cg.meta.Files.Count {
 			return wrapErr(ErrInvalidCacheMetadata, fmt.Sprintf("len(pageFiles) %d != cg.meta.Files.Pages %d", len(pageFiles), cg.meta.Files.Count))
 		}
