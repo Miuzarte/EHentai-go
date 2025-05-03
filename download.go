@@ -306,7 +306,7 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 func downloadPage(ctx context.Context, pageUrl string) (page PageData, err error) {
 	page = PageData{Page: UrlToPage(pageUrl)}
 	trys := 0
-retry:
+RETRY:
 	trys++
 	imgUrl, bakPage, err := fetchPageImageUrl(ctx, pageUrl)
 	if err != nil {
@@ -317,7 +317,7 @@ retry:
 		if bakPage != "" && err != context.Canceled {
 			if trys <= retryDepth {
 				pageUrl = bakPage
-				goto retry
+				goto RETRY
 			}
 		}
 		return page, err
