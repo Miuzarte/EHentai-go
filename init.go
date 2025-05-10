@@ -42,12 +42,12 @@ func init() {
 	// cookie
 	ehCookie, ok := os.LookupEnv(ENV_COOKIE)
 	if ok {
-		Cookie.fromString(ehCookie)
+		cookie.fromString(ehCookie)
 	} else {
-		Cookie.ipbMemberId = os.Getenv(ENV_COOKIE_IPB_MEMBER_ID)
-		Cookie.ipbPassHash = os.Getenv(ENV_COOKIE_IPB_PASS_HASH)
-		Cookie.igneous = os.Getenv(ENV_COOKIE_IGNEOUS)
-		Cookie.sk = os.Getenv(ENV_COOKIE_SK)
+		cookie.ipbMemberId = os.Getenv(ENV_COOKIE_IPB_MEMBER_ID)
+		cookie.ipbPassHash = os.Getenv(ENV_COOKIE_IPB_PASS_HASH)
+		cookie.igneous = os.Getenv(ENV_COOKIE_IGNEOUS)
+		cookie.sk = os.Getenv(ENV_COOKIE_SK)
 	}
 
 	// 域名前置, 方便测试

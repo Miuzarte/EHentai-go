@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/Miuzarte/EHentai-go/internal/utils"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -135,13 +137,13 @@ func post[T any](ctx context.Context, url string, body any) (*T, error) {
 	}
 	defer resp.Body.Close()
 
-	var respBody T
-	err = json.NewDecoder(resp.Body).Decode(&respBody)
+	respBody := new(T)
+	err = json.NewDecoder(resp.Body).Decode(respBody)
 	if err != nil {
 		return nil, err
 	}
 
-	return &respBody, nil
+	return respBody, nil
 }
 
 func extractMainDomain(host string) string {
@@ -163,6 +165,22 @@ func ipBannedCheck(doc *goquery.Document) bool {
 	return strings.Contains(doc.Find("body").Text(), "This IP address has been temporarily banned")
 }
 
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~uintptr
+}
+
+type number interface {
+	integer | ~float32 | ~float64
+}
+
+func itoa[T number](i T) string {
+	return strconv.FormatInt(int64(i), 10)
+}
+
+var atoi = strconv.Atoi
+
 func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	if len(indexes) == 0 ||
 		slices.Max(indexes) < sLen && slices.Min(indexes) >= 0 {
@@ -177,7 +195,7 @@ func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	return
 }
 
-func slicePlus(s []int, op int) []int {
+func sliceAdd(s []int, op int) []int {
 	if len(s) == 0 {
 		return nil
 	}
@@ -201,7 +219,7 @@ func rearange[T any](s []T, indexes []int) (rearranged []T) {
 
 // dirLookupExt 查找目录下的文件，返回指定扩展名的文件列表
 func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
-	extsMap := make(set[string])
+	extsMap := make(utils.Set[string])
 	for _, ext := range exts {
 		extsMap[strings.ToLower(ext)] = struct{}{}
 	}
@@ -223,18 +241,19 @@ func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
 	return des
 }
 
-// 为了避免在索引缓存元数据时遇到的越界问题, 元数据中以 map[string]string 储存页链接
-func pageUrlsToSlice(pageUrls map[string]string) []string {
-	s := make([]string, 0, len(pageUrls))
+// 为了避免在索引缓存元数据时遇到的越界问题,
+// 元数据中以 map[string]string 储存页链接
+func pageUrlsToSlice(pageUrls map[string]string) (urls []string) {
+	urls = make([]string, len(pageUrls))
 	for i := range len(pageUrls) {
-		s = append(s, pageUrls[itoa(i)])
+		urls[i] = pageUrls[itoa(i)]
 	}
-	return s
+	return urls
 }
 
 // 去重收集画廊 ID
-func collectGIds(pageUrls []string) set[int] {
-	gIds := make(set[int])
+func collectGIds(pageUrls []string) (gIds utils.Set[int]) {
+	gIds = make(utils.Set[int], len(pageUrls))
 	for _, pageUrl := range pageUrls {
 		gId := UrlToPage(pageUrl).GalleryId
 		gIds[gId] = struct{}{}

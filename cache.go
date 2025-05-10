@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Miuzarte/EHentai-go/internal/utils"
 )
 
 // TODO: 在 [os.Root] 得到完善后改用
@@ -32,6 +34,12 @@ var (
 	ErrUnknownImageType           = errors.New("unknown image type")
 	ErrPageNotCached              = errors.New("page not cached")
 )
+
+var writingWg sync.WaitGroup
+
+func WaitForWrite() {
+	writingWg.Wait()
+}
 
 // GetCache 获取画廊缓存
 func GetCache(gId int) *cacheGallery {
@@ -202,7 +210,7 @@ type cacheGallery struct {
 
 func (cg *cacheGallery) updateMetadata() error {
 	// 去重 排序 计数
-	st := make(set[CachePageInfo])
+	st := make(utils.Set[CachePageInfo])
 	cg.meta.Files.Pages = st.Clean(cg.meta.Files.Pages)
 	slices.SortFunc(
 		cg.meta.Files.Pages,
@@ -229,7 +237,7 @@ func (cg *cacheGallery) updateMetadata() error {
 		if err != nil {
 			return err
 		}
-		pageExts := make(set[string])
+		pageExts := make(utils.Set[string])
 		for _, pageInfo := range cg.meta.Files.Pages {
 			pageExts.Add(ImageType(pageInfo.Type).String())
 		}

@@ -46,11 +46,11 @@ var interceptorRoundTrip = &InterceptorRoundTrip{
 	Interceptors: defaultInterceptors,
 }
 
-var Cookie = &cookieManager{}
+var cookie = &cookieManager{}
 
 var httpClient = &http.Client{
 	Transport: interceptorRoundTrip,
-	Jar:       Cookie,
+	Jar:       cookie,
 }
 
 type cookieManager struct {

@@ -67,7 +67,7 @@ func UsageSetThreads(t *testing.T) {
 func UsageSetUseEnvPorxy(t *testing.T) {
 	// 默认为 true
 	// 配合域名前置食用
-	SetUseEnvPorxy(true)
+	SetUseEnvProxy(true)
 }
 
 // 设置 query nl 的重试次数

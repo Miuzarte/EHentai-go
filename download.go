@@ -8,6 +8,8 @@ import (
 	"iter"
 	"strings"
 	"sync"
+
+	"github.com/Miuzarte/EHentai-go/internal/utils"
 )
 
 var ErrDownloadUnreachableCase = fmt.Errorf("download: unreachable case")
@@ -51,7 +53,11 @@ func (dl *download) start(ctx context.Context) {
 			dl.page = &page
 			// 写缓存
 			if autoCacheEnabled && dl.cache != nil {
-				go dl.cache.Write(page)
+				writingWg.Add(1)
+				go func() {
+					defer writingWg.Done()
+					dl.cache.Write(page)
+				}()
 			}
 		}
 		return
@@ -216,15 +222,15 @@ func (j *downloader) downloadImage() ([]Image, error) {
 // 同时根据设置 返回可用的/创建新的 本地缓存
 //
 // 只有一个 gallery, len(cgs) 不会大于 1
-func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, aCache map[int]*cacheGallery, err error) {
+func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, availCache map[int]*cacheGallery, err error) {
 	gId := UrlToGallery(galleryUrl).GalleryId
 
 	cg := GetCache(gId)
 	mc := MetaCacheRead(gId)
 	if cg != nil {
 		pageUrls = pageUrlsToSlice(cg.meta.PageUrls)
-		aCache = make(map[int]*cacheGallery, 1)
-		aCache[gId] = cg
+		availCache = make(map[int]*cacheGallery, 1)
+		availCache[gId] = cg
 
 	} else if mc != nil && len(mc.pageUrls) != 0 {
 		pageUrls = mc.pageUrls
@@ -235,10 +241,10 @@ func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int
 		}
 	}
 
-	set := make(set[int])
-	pageNums = set.Clean(pageNums)                         // 去重
-	pageNums = cleanOutOfRange(len(pageUrls), pageNums)    // 越界检查
-	pageUrls = rearange(pageUrls, slicePlus(pageNums, -1)) // 按页码重排 url
+	set := make(utils.Set[int])
+	pageNums = set.Clean(pageNums)                        // 去重
+	pageNums = cleanOutOfRange(len(pageUrls), pageNums)   // 越界检查
+	pageUrls = rearange(pageUrls, sliceAdd(pageNums, -1)) // 按页码重排 url
 
 	if autoCacheEnabled && cg == nil {
 		// 创建缓存
@@ -247,8 +253,8 @@ func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int
 			return nil, nil, err
 		}
 		if cg != nil {
-			aCache = make(map[int]*cacheGallery, 1)
-			aCache[gId] = cg
+			availCache = make(map[int]*cacheGallery, 1)
+			availCache[gId] = cg
 		}
 	}
 

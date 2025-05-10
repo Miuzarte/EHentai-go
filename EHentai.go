@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	cookie     = cookieManager{}
 	threads    = 4 // 下载并发数
 	retryDepth = 2 // 使用页备链重试次数
 
@@ -18,10 +17,10 @@ var (
 
 // SetCookie 设置 cookie, 访问 exhentai 时必需
 func SetCookie(memberId, passHash, igneous, sk string) {
-	Cookie.ipbMemberId = memberId
-	Cookie.ipbPassHash = passHash
-	Cookie.igneous = igneous
-	Cookie.sk = sk
+	cookie.ipbMemberId = memberId
+	cookie.ipbPassHash = passHash
+	cookie.igneous = igneous
+	cookie.sk = sk
 }
 
 // SetCookieFromString 从字符串解析 cookie
@@ -57,10 +56,10 @@ func SetThreads(n int) {
 	threads = n
 }
 
-// SetUseEnvPorxy 设置是否使用系统环境变量中的代理
+// SetUseEnvProxy 设置是否使用系统环境变量中的代理
 //
 // 默认为 true
-func SetUseEnvPorxy(b bool) {
+func SetUseEnvProxy(b bool) {
 	if b {
 		defaultRoundTripper.Proxy = http.ProxyFromEnvironment
 	} else {
