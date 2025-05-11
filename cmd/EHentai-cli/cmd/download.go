@@ -11,7 +11,6 @@ import (
 
 	"github.com/Miuzarte/EHentai-go"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/config"
-	_ "github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/config"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/errors"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/log"
 	progressbar "github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/progressBar"
@@ -84,33 +83,8 @@ var downloadCmd = &cobra.Command{
 		var dl *ehentaiDownload
 		dl, err = galleryDownload(cmd.Context(), galleries, sliceSyntaxes)
 		if err != nil {
-			return err
+			return
 		}
-
-		// TODO: improve this shit
-		usePb := config.C.Download.ProgressBar
-		var progress *mpb.Progress
-		var bar *mpb.Bar
-		if usePb {
-			progress = mpb.NewWithContext(
-				cmd.Context(),
-				progressbar.RefreshRate,
-			)
-			n := 0
-			for i := range dl.GIds {
-				n += len(dl.PageUrls[dl.GIds[i]])
-			}
-			bar = progress.New(int64(n),
-				progressbar.BarStyleMain,
-				mpb.PrependDecorators(
-					progressbar.Spinner,
-					progressbar.ETA,
-				),
-				mpb.BarRemoveOnComplete(),
-			)
-			bar.SetPriority(0)
-		}
-		startTime := time.Now()
 
 		// galleries
 		for _, gId := range dl.GIds {
@@ -119,9 +93,6 @@ var downloadCmd = &cobra.Command{
 				if dlErr != nil {
 					log.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
 					continue
-				}
-				if usePb {
-					bar.EwmaIncrement(time.Since(startTime))
 				}
 			}
 		}
@@ -133,25 +104,8 @@ var downloadCmd = &cobra.Command{
 			}
 			dl, err = pagesDownload(cmd.Context(), pages)
 			if err != nil {
-				return err
+				return
 			}
-
-			if usePb {
-				n := 0
-				for i := range dl.GIds {
-					n += len(dl.PageUrls[dl.GIds[i]])
-				}
-				bar = progress.New(int64(n),
-					progressbar.BarStyleMain,
-					mpb.PrependDecorators(
-						progressbar.Spinner,
-						progressbar.ETA,
-					),
-					mpb.BarRemoveOnComplete(),
-				)
-				bar.SetPriority(1)
-			}
-			startTime := time.Now()
 
 			for _, gId := range dl.GIds {
 				log.Info("downloading: ", dl.GalleryUrls[gId])
@@ -159,9 +113,6 @@ var downloadCmd = &cobra.Command{
 					if dlErr != nil {
 						log.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
 						continue
-					}
-					if usePb {
-						bar.EwmaIncrement(time.Since(startTime))
 					}
 				}
 			}
@@ -184,9 +135,34 @@ type ehentaiDownload struct {
 	GIds        []int // 准备下载的画廊, 作为以下 map 的 key
 	Gallerys    map[int]EHentai.Gallery
 	GalleryUrls map[int]string
-	// GMetas map[int]*EHentai.GalleryMetadata
-	// Totals map[int]int // 对应画廊的图片数量
-	PageUrls map[int][]string // 对应画廊要下载的链接, 长度可能小于 .Totals
+	PageUrls    map[int][]string // 对应画廊要下载的链接, 长度可能小于 .Totals
+
+	progress *mpb.Progress
+	bar      *mpb.Bar
+	start    time.Time
+}
+
+func (ep *ehentaiDownload) initProgressBar(ctx context.Context, total int64) {
+	if !config.C.Download.ProgressBar {
+		return
+	}
+	ep.progress = mpb.NewWithContext(ctx, progressbar.RefreshRate)
+	ep.bar = ep.progress.New(total,
+		progressbar.BarStyleMain,
+		mpb.PrependDecorators(
+			progressbar.Spinner,
+			progressbar.ETA,
+		),
+		mpb.BarRemoveOnComplete(),
+	)
+	ep.bar.SetPriority(progressbar.Priority())
+}
+
+func (ep *ehentaiDownload) pbIncr(n int64) {
+	if !config.C.Download.ProgressBar {
+		return
+	}
+	ep.bar.EwmaIncrInt64(n, time.Since(ep.start))
 }
 
 func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceSyntaxes) (ep *ehentaiDownload, err error) {
@@ -194,11 +170,7 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 		GIds:        make([]int, len(galleryUrls)),
 		Gallerys:    make(map[int]EHentai.Gallery, len(galleryUrls)),
 		GalleryUrls: make(map[int]string, len(galleryUrls)),
-
-		// GMetas: make(map[int]*EHentai.GalleryMetadata, len(galleryUrls)),
-		// Totals: make(map[int]int, len(galleryUrls)),
-
-		PageUrls: make(map[int][]string, len(galleryUrls)),
+		PageUrls:    make(map[int][]string, len(galleryUrls)),
 	}
 
 	// 按原顺序收集画廊 ID 和 URL
@@ -222,13 +194,6 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 	if len(resp.GMetadata) != len(ep.GIds) {
 		return nil, fmt.Errorf("len(resp.GMetadata)(%d) != len(ep.GIds)(%d)", len(resp.GMetadata), len(ep.GIds))
 	}
-	// for i := range resp.GMetadata {
-	// 	ep.GMetas[resp.GMetadata[i].GId] = &resp.GMetadata[i]
-	// 	ep.Totals[resp.GMetadata[i].GId], err = strconv.Atoi(resp.GMetadata[i].FileCount)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to parse file count \"%s\": %w", resp.GMetadata[i].FileCount, err)
-	// 	}
-	// }
 
 	// 获取画廊页链接 同时解析 [utils.SliceSyntaxes]
 	for _, gId := range ep.GIds {
@@ -249,6 +214,13 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 		ep.PageUrls[gId] = pageUrls
 	}
 
+	// 进度条
+	n := 0
+	for _, urls := range ep.PageUrls {
+		n += len(urls)
+	}
+	ep.initProgressBar(ctx, int64(n))
+
 	return
 }
 
@@ -264,11 +236,7 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 		GIds:        make([]int, 0, len(gPageUrls)),
 		Gallerys:    make(map[int]EHentai.Gallery, len(gPageUrls)),
 		GalleryUrls: make(map[int]string, len(gPageUrls)),
-
-		// GMetas: make(map[int]*EHentai.GalleryMetadata, len(gPageUrls)),
-		// Totals: make(map[int]int, len(gPageUrls)),
-
-		PageUrls: gPageUrls,
+		PageUrls:    gPageUrls,
 	}
 
 	// 排序画廊 ID
@@ -304,15 +272,15 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 	if len(resp2.GMetadata) != len(ep.GIds) {
 		return nil, fmt.Errorf("len(resp2.GMetadata)(%d) != len(ep.GIds)(%d)", len(resp2.GMetadata), len(ep.GIds))
 	}
-	// for i := range resp2.GMetadata {
-	// 	ep.GMetas[resp2.GMetadata[i].GId] = &resp2.GMetadata[i]
-	// 	ep.Totals[resp2.GMetadata[i].GId], err = strconv.Atoi(resp2.GMetadata[i].FileCount)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to parse file count \"%s\": %w", resp2.GMetadata[i].FileCount, err)
-	// 	}
-	// }
 
-	return ep, nil
+	// 进度条
+	n := 0
+	for _, urls := range ep.PageUrls {
+		n += len(urls)
+	}
+	ep.initProgressBar(ctx, int64(n))
+
+	return
 }
 
 func (ep *ehentaiDownload) downloadIter(ctx context.Context, gId int) iter.Seq2[EHentai.PageData, error] {
@@ -326,6 +294,7 @@ func (ep *ehentaiDownload) downloadIter(ctx context.Context, gId int) iter.Seq2[
 			}
 		}
 		for page, err := range EHentai.DownloadPagesIter(ctx, ep.PageUrls[gId]...) {
+			ep.pbIncr(1)
 			if yield(page, err) {
 				continue
 			}
