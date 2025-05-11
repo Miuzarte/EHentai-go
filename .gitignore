@@ -1,2 +1,3 @@
 EHentaiCache/
-cmd/EHentai-cli/EHcli.exe
+cmd/EHentai-cli/EHcli*
+cmd/EHentai-cli/config.*

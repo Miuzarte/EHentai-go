@@ -2,12 +2,12 @@ package utils
 
 import "fmt"
 
-func HyperlinkFile(link string, show ...string) string {
-	s := link
+func HyperlinkFile(path string, show ...string) string {
+	s := path
 	if len(show) != 0 {
 		s = show[0]
 	}
-	return fmt.Sprintf("\x1b]8;;file://%s\x1b\\%s\x1b]8;;\x1b\\", link, s)
+	return fmt.Sprintf("\x1b]8;;file://%s\x1b\\%s\x1b]8;;\x1b\\", path, s)
 }
 
 func Hyperlink(link string, show ...string) string {
@@ -38,4 +38,14 @@ func IsNumber(s string, additional ...byte) bool {
 		}
 	}
 	return true
+}
+
+func WaitAck(msg string) bool {
+	fmt.Print(msg + " (y/n): ")
+	var input string
+	_, _ = fmt.Scanln(&input)
+	if input == "y" || input == "Y" {
+		return true
+	}
+	return false
 }

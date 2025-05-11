@@ -1,4 +1,4 @@
-package progressbar
+package bar
 
 import (
 	"sync/atomic"
@@ -8,11 +8,11 @@ import (
 	"github.com/vbauerster/mpb/v8/decor"
 )
 
-var priority atomic.Int32
+var priority int32
 
 func Priority() int {
-	priority.Add(1)
-	return int(priority.Load())
+	atomic.AddInt32(&priority, 1)
+	return int(priority)
 }
 
 var (

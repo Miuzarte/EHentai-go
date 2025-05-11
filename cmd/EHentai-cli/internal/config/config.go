@@ -2,87 +2,113 @@ package config
 
 import (
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Miuzarte/EHentai-go"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/log"
+	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/errors"
 	"github.com/Miuzarte/EHentai-go/internal/env"
 	"github.com/Miuzarte/EHentai-go/internal/utils"
+	"github.com/Miuzarte/SimpleLog"
 	"github.com/spf13/viper"
 )
 
 //go:embed config.toml
 var defaultConfig []byte
 
-type config struct {
-	Account struct {
-		Cookie string
-		// OR
-		IpbMemberId string
-		IpbPassHash string
-		Igneous     string
-		Sk          string
-	}
-	Download struct {
-		ProgressBar    bool
-		UseEnvProxy    bool
-		DomainFronting bool
-		Threads        int
-		RetryDepth     int
-		Dir            string
-	}
-
-	*viper.Viper
+type logConfig struct {
+	Level int
 }
 
-var C = config{Viper: viper.New()}
+type accountConfig struct {
+	Cookie string
+	// OR
+	IpbMemberId string
+	IpbPassHash string
+	Igneous     string
+	Sk          string
+}
 
-func init() {
+type downloadConfig struct {
+	ProgressBar    bool
+	UseEnvProxy    bool
+	DomainFronting bool
+	Threads        int
+	RetryDepth     int
+	Dir            string
+}
+
+type searchConfig struct {
+	DefaultSite         EHentai.Domain
+	UseEhTagTranslation bool
+	ShowTorrentDetails  bool
+	Category            []string
+	Cat                 EHentai.Category
+}
+
+var (
+	Log      logConfig
+	Account  accountConfig
+	Download downloadConfig
+	Search   searchConfig
+)
+
+var log = SimpleLog.New("[Config]", true, false)
+
+func InitConfig() error {
 	configPath := filepath.Join(env.XDir, "config.toml")
 
-	C.AddConfigPath(env.XDir)
-	C.SetConfigName("config")
+	viper.AddConfigPath(env.XDir)
+	viper.SetConfigName("config")
 	// Config.SetConfigType("toml") // 任意
 
 	var err error
 
-	err = C.ReadInConfig()
+	err = viper.ReadInConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			log.Fatal("failed to read config file: ", err)
+			log.Panic("failed to read config file: ", err)
 		} else {
 			err = os.WriteFile(configPath, defaultConfig, 0o644)
 			if err != nil {
-				log.Fatal("failed to create config file: ", err)
+				log.Panic("failed to create config file: ", err)
 			}
 			log.Infof("config.toml created at %s, please edit it", utils.HyperlinkFile(configPath))
 			os.Exit(0)
 		}
 	}
 
-	err = C.UnmarshalKey("account", &C.Account)
+	err = viper.UnmarshalKey("log", &Log)
+	if err != nil {
+		log.Warn("failed to unmarshal log config: ", err)
+	}
+	log.SetLevel(SimpleLog.Level(Log.Level))
+
+	err = viper.UnmarshalKey("account", &Account)
 	if err != nil {
 		log.Warn("failed to unmarshal account config: ", err)
 	} else {
 		switch {
-		case C.Account.Cookie != "":
-			_, err := EHentai.SetCookieFromString(C.Account.Cookie)
+		case Account.Cookie != "":
+			_, err := EHentai.SetCookieFromString(Account.Cookie)
 			if err != nil {
-				log.Fatal("failed to set cookie: ", err)
+				log.Error("failed to parse cookie: ", err)
+				return errors.Handled
 			}
 
-		case C.Account.IpbMemberId != "" &&
-			C.Account.IpbPassHash != "" &&
-			C.Account.Igneous != "":
-			if C.Account.Sk == "" {
+		case Account.IpbMemberId != "" &&
+			Account.IpbPassHash != "" &&
+			Account.Igneous != "":
+			if Account.Sk == "" {
 				log.Warn("sk not set, the language of search results might be unexpected")
 			}
 			EHentai.SetCookie(
-				C.Account.IpbMemberId,
-				C.Account.IpbPassHash,
-				C.Account.Igneous,
-				C.Account.Sk,
+				Account.IpbMemberId,
+				Account.IpbPassHash,
+				Account.Igneous,
+				Account.Sk,
 			)
 
 		default:
@@ -90,25 +116,58 @@ func init() {
 		}
 	}
 
-	err = C.UnmarshalKey("download", &C.Download)
+	err = viper.UnmarshalKey("download", &Download)
 	if err != nil {
-		log.Fatal("failed to unmarshal download config: ", err)
+		log.Error("failed to unmarshal download config: ", err)
+		return errors.Handled
 	} else {
-		if C.Download.Threads > 0 {
-			EHentai.SetThreads(C.Download.Threads)
+		if Download.Threads > 0 {
+			EHentai.SetThreads(Download.Threads)
 		}
-		if C.Download.RetryDepth > 0 {
-			EHentai.SetRetryDepth(C.Download.RetryDepth)
+		if Download.RetryDepth > 0 {
+			EHentai.SetRetryDepth(Download.RetryDepth)
 		}
-		EHentai.SetUseEnvProxy(C.Download.UseEnvProxy)
-		EHentai.SetDomainFronting(C.Download.DomainFronting)
+		EHentai.SetUseEnvProxy(Download.UseEnvProxy)
+		EHentai.SetDomainFronting(Download.DomainFronting)
 
 		// 通过缓存功能实现下载
 		// 同时还支持续传
 		EHentai.SetAutoCacheEnabled(true)
-		if C.Download.Dir == "" {
-			C.Download.Dir = env.XDir
+		if Download.Dir == "" {
+			Download.Dir = env.XDir
 		}
-		EHentai.SetCacheDir(C.Download.Dir)
+		EHentai.SetCacheDir(Download.Dir)
 	}
+
+	err = viper.UnmarshalKey("search", &Search)
+	if err != nil {
+		log.Error("failed to unmarshal search config: ", err)
+		return errors.Handled
+	} else {
+		if Search.DefaultSite == "" {
+			Search.DefaultSite = EHentai.EHENTAI_DOMAIN
+		} else {
+			switch {
+			case strings.Contains(Search.DefaultSite, "e-h") ||
+				strings.Contains(Search.DefaultSite, "eh"):
+				Search.DefaultSite = EHentai.EHENTAI_DOMAIN
+			case strings.Contains(Search.DefaultSite, "ex"):
+				Search.DefaultSite = EHentai.EXHENTAI_DOMAIN
+			default:
+				log.Errorf("invalid search default site: %s, use '%s' or '%s'", Search.DefaultSite, EHentai.EHENTAI_DOMAIN, EHentai.EXHENTAI_DOMAIN)
+				if !utils.WaitAck(fmt.Sprintf("use %s to continue?", EHentai.EHENTAI_DOMAIN)) {
+					return errors.Handled
+				}
+			}
+		}
+		Search.Cat, err = EHentai.ParseCategory(Search.Category...)
+		if err != nil {
+			log.Error("failed to parse category: ", err)
+			if !utils.WaitAck("continue?") {
+				return errors.Handled
+			}
+		}
+	}
+
+	return nil
 }

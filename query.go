@@ -61,6 +61,9 @@ func (c Category) Str() string {
 }
 
 func (c Category) String() string {
+	if c == 0 {
+		return "All"
+	}
 	var cats []string
 	for i := range CATEGORY_COUNT {
 		if c&(1<<i) != 0 {
@@ -72,6 +75,45 @@ func (c Category) String() string {
 
 func (c Category) Format() string {
 	return strconv.FormatUint(uint64(1023^c), 10)
+}
+
+var ErrUnknownCategory = errors.New("unknown category")
+
+func ParseCategory(ss ...string) (cat Category, err error) {
+	replacer := strings.NewReplacer(
+		"-", "",
+		"_", "",
+		" ", "",
+	)
+	for _, s := range ss {
+		s = replacer.Replace(s)
+		s = strings.ToUpper(s)
+		switch s {
+		case "MISC":
+			cat |= CATEGORY_MISC
+		case "DOUJINSHI":
+			cat |= CATEGORY_DOUJINSHI
+		case "MANGA":
+			cat |= CATEGORY_MANGA
+		case "ARTISTCG":
+			cat |= CATEGORY_ARTIST_CG
+		case "GAMECG":
+			cat |= CATEGORY_GAME_CG
+		case "IMAGESET":
+			cat |= CATEGORY_IMAGE_SET
+		case "COSPLAY":
+			cat |= CATEGORY_COSPLAY
+		case "ASIANPORN":
+			cat |= CATEGORY_ASIAN_PORN
+		case "NONH":
+			cat |= CATEGORY_NON_H
+		case "WESTERN":
+			cat |= CATEGORY_WESTERN
+		default:
+			return 0, wrapErr(ErrUnknownCategory, s)
+		}
+	}
+	return
 }
 
 var (

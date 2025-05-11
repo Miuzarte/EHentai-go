@@ -2,4 +2,7 @@ package errors
 
 import "errors"
 
-var ErrAborted = errors.New("aborted")
+var (
+	Handled = errors.New("handled") // 已处理, 不再需要 rootCmd 输出
+	Aborted = errors.New("aborted")
+)

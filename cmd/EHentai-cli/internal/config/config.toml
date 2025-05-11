@@ -1,5 +1,18 @@
-[account] # 优先级高于环境变量
-cookie = '' 
+[log]
+# TraceLevel = iota = 0
+# DebugLevel
+# InfoLevel
+# WarnLevel
+# ErrorLevel
+# FatalLevel
+# PanicLevel
+# level = 0
+level = 1
+# level = 2
+
+[account]
+# 不为空时会覆盖环境变量
+cookie = ''
 # OR
 ipbmemberid = ''
 ipbpasshash = ''
@@ -7,9 +20,45 @@ igneous = ''
 sk = '' # 不给的话搜索结果只有英文
 
 [download]
-progressBar = true # 下载进度条
+# 下载进度条
+progressBar = true
+# 并发数
 threads = 8
+# 备链重试次数, 默认即可
 retryDepth = 2
-useEnvProxy = true # HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions thereof)
+# 启用时, go 标准库会查找以下环境变量设置代理
+# HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions thereof)
+useEnvProxy = true
+# 域名前置
 domainFronting = false
-dir = '' # 留空时使用二进制文件所在目录
+# 下载目录， 留空时使用二进制文件所在目录
+dir = ''
+
+[search]
+# 默认搜索站点
+# 可通过 '-e'/'-x' 标志覆盖
+defaultSite = 'e-hentai.org'
+# 启用标签翻译
+# 每次运行都需要从 GitHub 拉取数据, 弱网慎用
+# 可通过 '-t' 标志覆盖
+useEhTagTranslation = false
+# 'MISC'      // 杂项
+# 'DOUJINSHI' // 同人志
+# 'MANGA'     // 漫画
+# 'ARTIST_CG' // 画师 CG
+# 'GAME_CG'   // 游戏 CG
+# 'IMAGE_SET' // 图集
+# 'COSPLAY'
+# 'ASIAN_PORN'
+# 'NON_H'
+# 'WESTERN'
+# 留空则搜索所有类型, 不限制大小写
+# 可通过 '--cat' 标志覆盖
+category = [
+    'DOUJINSHI',
+    'MANGA',
+    'COSPLAY',
+    'NON_H',
+]
+# 在使用 -d 详细搜索时列出所有种子的详情
+showTorrentDetails = true

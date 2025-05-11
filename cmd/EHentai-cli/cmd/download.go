@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"github.com/Miuzarte/EHentai-go"
+	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/bar"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/config"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/errors"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/log"
-	progressbar "github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/progressBar"
 	"github.com/Miuzarte/EHentai-go/internal/utils"
+	"github.com/Miuzarte/SimpleLog"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
 )
+
+var dlLog = SimpleLog.New("[Download]", true, false)
 
 const downloadDesc = "Download gallery or pages, using slice syntax(allow negative) to specify page range"
 
@@ -36,6 +38,9 @@ var downloadCmd = &cobra.Command{
 	Short: downloadDesc,
 	Long:  downloadDescLong,
 	Args:  cobra.MinimumNArgs(1),
+	PreRunE: func(_ *cobra.Command, _ []string) (err error) {
+		return config.InitConfig()
+	},
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		// 解析切片
 		var sliceSyntaxes utils.SliceSyntaxes
@@ -70,12 +75,12 @@ var downloadCmd = &cobra.Command{
 		}
 
 		if len(sliceSyntaxes) != 0 && len(args) > 1 {
-			log.Warn("you are using page range in multiple urls")
+			dlLog.Warn("you are using page range in multiple urls")
 			var input string
 			fmt.Print("continue? (y/n): ")
 			fmt.Scanln(&input)
 			if input != "y" && input != "Y" {
-				err = errors.ErrAborted
+				err = errors.Aborted
 				return
 			}
 		}
@@ -88,10 +93,10 @@ var downloadCmd = &cobra.Command{
 
 		// galleries
 		for _, gId := range dl.GIds {
-			log.Info("downloading: ", dl.GalleryUrls[gId])
+			dlLog.Info("downloading: ", dl.GalleryUrls[gId])
 			for page, dlErr := range dl.downloadIter(cmd.Context(), gId) {
 				if dlErr != nil {
-					log.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
+					dlLog.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
 					continue
 				}
 			}
@@ -100,7 +105,7 @@ var downloadCmd = &cobra.Command{
 		// pages
 		if len(pages) != 0 {
 			if len(sliceSyntaxes) != 0 {
-				log.Warn("slice syntax will be ignored for pages download")
+				dlLog.Warn("slice syntax will be ignored for pages download")
 			}
 			dl, err = pagesDownload(cmd.Context(), pages)
 			if err != nil {
@@ -108,10 +113,10 @@ var downloadCmd = &cobra.Command{
 			}
 
 			for _, gId := range dl.GIds {
-				log.Info("downloading: ", dl.GalleryUrls[gId])
+				dlLog.Info("downloading: ", dl.GalleryUrls[gId])
 				for page, dlErr := range dl.downloadIter(cmd.Context(), gId) {
 					if dlErr != nil {
-						log.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
+						dlLog.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
 						continue
 					}
 				}
@@ -121,7 +126,7 @@ var downloadCmd = &cobra.Command{
 		// 写入是异步的
 		EHentai.WaitForWrite()
 
-		log.Info("download completed")
+		dlLog.Info("download completed")
 		return nil
 	},
 }
@@ -143,23 +148,23 @@ type ehentaiDownload struct {
 }
 
 func (ep *ehentaiDownload) initProgressBar(ctx context.Context, total int64) {
-	if !config.C.Download.ProgressBar {
+	if !config.Download.ProgressBar {
 		return
 	}
-	ep.progress = mpb.NewWithContext(ctx, progressbar.RefreshRate)
+	ep.progress = mpb.NewWithContext(ctx, bar.RefreshRate)
 	ep.bar = ep.progress.New(total,
-		progressbar.BarStyleMain,
+		bar.BarStyleMain,
 		mpb.PrependDecorators(
-			progressbar.Spinner,
-			progressbar.ETA,
+			bar.Spinner,
+			bar.ETA,
 		),
 		mpb.BarRemoveOnComplete(),
 	)
-	ep.bar.SetPriority(progressbar.Priority())
+	ep.bar.SetPriority(bar.Priority())
 }
 
 func (ep *ehentaiDownload) pbIncr(n int64) {
-	if !config.C.Download.ProgressBar {
+	if !config.Download.ProgressBar {
 		return
 	}
 	ep.bar.EwmaIncrInt64(n, time.Since(ep.start))
