@@ -1,0 +1,69 @@
+# 优先级: 命令行参数 > 配置文件 > 环境变量(有的话)
+# '-c --config' 指定配置文件
+
+[log]
+# TraceLevel = iota = 0
+# DebugLevel
+# InfoLevel
+# WarnLevel
+# ErrorLevel
+# FatalLevel
+# PanicLevel
+# level = 0 # Trace '--trace'
+level = 1 # Debug '--debug'
+# level = 2 # Info
+
+[account]
+# 不为空时会覆盖环境变量
+cookie = '' # '--cookie'
+# OR
+ipbmemberid = '' # '--ipbm'
+ipbpasshash = '' # '--ipbh'
+igneous = ''     # '--ig'
+# 不给的话搜索结果只有英文
+sk = ''          # '--sk'
+
+[download]
+# 并发数
+threads = 8 # '--threads'
+# 下载进度条
+progressBar = true # '--progress'
+# 备链重试次数, 默认即可
+retryDepth = 2 # '--retry'
+# TODO: custom proxy by url
+# 启用时, go 标准库会查找以下环境变量设置代理
+# HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions thereof)
+envProxy = true # '--env-proxy'
+# 域名前置
+domainFronting = false # '--domain-fronting'
+# 下载目录, 留空时使用二进制文件所在目录
+dir = '' # '--dir'
+
+[search]
+# 搜索站点
+site = 'e-hentai.org' # '-e' '--eh' '--site e-hentai.org'
+# site = 'exhentai.org' # '-x' '--ex' '--site exhentai.org'
+# 标签翻译
+# 每次运行都需要从 GitHub 拉取数据, 弱网慎用
+ehTagTranslation = false # '-t' '--eh-tag'
+# 'MISC'      // 杂项
+# 'DOUJINSHI' // 同人志
+# 'MANGA'     // 漫画
+# 'ARTIST_CG' // 画师 CG
+# 'GAME_CG'   // 游戏 CG
+# 'IMAGE_SET' // 图集
+# 'COSPLAY'
+# 'ASIAN_PORN'
+# 'NON_H'
+# 'WESTERN'
+# 不区分大小写, 留空(--cat "")则搜索所有类型
+category = [ # '--cat DOUJINSHI,MANGA,...'
+    'DOUJINSHI',
+    'MANGA',
+    'COSPLAY',
+    'NON_H',
+]
+# 搜索同时通过官方 api 获取详细信息
+detail = false # '-d' '--detail'
+# 在启用 detail 时列出所有种子的详情
+torrentDetail = true # '--torrent-detail'

@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/Miuzarte/EHentai-go"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/config"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/errors"
 	"github.com/Miuzarte/EHentai-go/internal/utils"
 	"github.com/Miuzarte/SimpleLog"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 var searchLog = SimpleLog.New("[Search]", true, false)
@@ -46,6 +46,7 @@ const torrentTemplate = //
 var tmpl *template.Template
 
 func initTemplate() {
+	// TODO: read custom template dynamically
 	tmpl = template.New("EHentai-cli")
 	tmpl.Funcs(template.FuncMap{
 		"Join":      strings.Join,
@@ -74,66 +75,35 @@ func initTemplate() {
 
 const searchDesc = "Search for galleries by keyword"
 
-const searchDescLong = searchDesc +
-	"\n" + "-d to get detailed information about galleries" +
-	"\n" + "-e for EHentai" +
-	"\n" + "-x for ExHentai" +
-	"\n" + "-t for EHentai tag translation"
-
-var (
-	flagDetail           bool
-	flagEh               bool
-	flagEx               bool
-	flagEhTagTranslation bool
-
-	flagCat []string
-)
+const searchDescLong = searchDesc // TODO
 
 var searchCmd = &cobra.Command{
 	Use:   "search <keyword>",
 	Short: searchDesc,
 	Long:  searchDescLong,
 	Args:  cobra.MinimumNArgs(1), // 任意数量实现关键字带空格时不需要引号包裹
-	PreRunE: func(_ *cobra.Command, _ []string) (err error) {
-		err = config.InitConfig()
-		if err != nil {
-			return
-		}
+	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 		initTemplate()
-		return nil
+		searchFlagChanged(cmd.Flags())
+		return initConfig(cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		site := config.Search.DefaultSite
-		switch {
-		case flagEh:
-			site = EHentai.EHENTAI_DOMAIN
-		case flagEx:
-			site = EHentai.EXHENTAI_DOMAIN
-		}
-
 		keyword := strings.Join(args, " ")
 
-		cat := config.Search.Cat
-		if len(flagCat) != 0 {
-			cat, err = EHentai.ParseCategory(flagCat...)
-			if err != nil {
-				searchLog.Error("failed to parse category: ", err)
-				return errors.Handled
-			}
-		}
-		searchLog.Debug("searching site: ", site)
+		cat := config.Search.category
+		searchLog.Debug("searching site: ", config.Search.Site)
 		searchLog.Debug("searching keyword: ", keyword)
 		searchLog.Debug("searching categories: ", cat)
 
 		var total int
-		if !flagDetail {
-			total, err = search(cmd.Context(), site, keyword, cat)
+		if !config.Search.Detail {
+			total, err = search(cmd.Context(), config.Search.Site, keyword, cat)
 		} else {
-			total, err = searchDetail(cmd.Context(), site, keyword, cat)
+			total, err = searchDetail(cmd.Context(), config.Search.Site, keyword, cat)
 		}
 		if err != nil {
 			searchLog.Error("failed to search: ", err)
-			return errors.Handled
+			return ErrHandled
 		}
 
 		searchLog.Infof("%d results in total", total)
@@ -143,22 +113,71 @@ var searchCmd = &cobra.Command{
 	},
 }
 
+const (
+	FLAG_EH   = "eh"
+	FLAG_EX   = "ex"
+	FLAG_SITE = "site"
+
+	FLAG_EH_TAG         = "eh-tag"
+	FLAG_CAT            = "cat"
+	FLAG_DETAIL         = "detail"
+	FLAG_TORRENT_DETAIL = "torrent-detail"
+)
+
 func init() {
-	// TODO: viper binding
-	searchCmd.Flags().BoolVarP(&flagDetail, "detail", "d", false, "Fetch detailed information about galleries")
-	searchCmd.Flags().BoolVarP(&flagEh, "eh", "e", false, "Force use EHentai")
-	searchCmd.Flags().BoolVarP(&flagEx, "ex", "x", false, "Force use ExHentai")
-	searchCmd.MarkFlagsMutuallyExclusive("eh", "ex")
-	searchCmd.Flags().BoolVarP(&flagEhTagTranslation, "eh-tag", "t", false, "Force use EHentai tag translation")
-	searchCmd.Flags().StringSliceVar(&flagCat, "cat", nil, "Specify categories (e.g. --cat DOUJINSHI,MANGA)")
+	searchCmd.Flags().BoolP(FLAG_EH, "e", false, "use e-hentai.org")
+	searchCmd.Flags().BoolP(FLAG_EX, "x", false, "use exhentai.org")
+	searchCmd.Flags().String(FLAG_SITE, EHentai.EHENTAI_DOMAIN, "specify site by string (e.g. --site exhentai.org)")
+	searchCmd.MarkFlagsMutuallyExclusive(FLAG_EH, FLAG_EX, FLAG_SITE)
+
+	searchCmd.Flags().BoolP(FLAG_EH_TAG, "t", false, "enable EhTagTranslation")
+	searchCmd.Flags().StringSlice(FLAG_CAT, nil, "specify categories (e.g. --cat DOUJINSHI,MANGA)")
+	searchCmd.Flags().BoolP(FLAG_DETAIL, "d", false, "fetch detailed information about galleries")
+	searchCmd.Flags().Bool(FLAG_TORRENT_DETAIL, false, "show torrents while flag detail is set")
+
 	rootCmd.AddCommand(searchCmd)
+}
+
+func searchFlagChanged(searchFlags *pflag.FlagSet) {
+	if searchFlags.Changed(FLAG_EH) {
+		eh, _ := searchFlags.GetBool(FLAG_EH)
+		if eh {
+			viper.Set("search.site", EHentai.EHENTAI_DOMAIN)
+		}
+	}
+	if searchFlags.Changed(FLAG_EX) {
+		ex, _ := searchFlags.GetBool(FLAG_EX)
+		if ex {
+			viper.Set("search.site", EHentai.EXHENTAI_DOMAIN)
+		}
+	}
+	if searchFlags.Changed(FLAG_SITE) {
+		site, _ := searchFlags.GetString(FLAG_SITE)
+		viper.Set("search.site", site)
+	}
+	if searchFlags.Changed(FLAG_EH_TAG) {
+		ehTag, _ := searchFlags.GetBool(FLAG_EH_TAG)
+		viper.Set("search.ehTagTranslation", ehTag)
+	}
+	if searchFlags.Changed(FLAG_CAT) {
+		cat, _ := searchFlags.GetStringSlice(FLAG_CAT)
+		viper.Set("search.category", cat)
+	}
+	if searchFlags.Changed(FLAG_DETAIL) {
+		detail, _ := searchFlags.GetBool(FLAG_DETAIL)
+		viper.Set("search.detail", detail)
+	}
+	if searchFlags.Changed(FLAG_TORRENT_DETAIL) {
+		torrentDetail, _ := searchFlags.GetBool(FLAG_TORRENT_DETAIL)
+		viper.Set("search.torrentDetail", torrentDetail)
+	}
 }
 
 // 搜索完再初始化数据库,
 // 以免无结果时浪费时间
 func initEhTagDb() (err error) {
 	// TODO: database cache
-	if config.Search.UseEhTagTranslation || flagEhTagTranslation {
+	if config.Search.EhTagTranslation {
 		searchLog.Debug("init EhTagTranslation database...")
 		tn := time.Now()
 		err = EHentai.InitEhTagDB()
@@ -191,7 +210,7 @@ func search(ctx context.Context, site EHentai.Domain, keyword string, categories
 		result := results[sn-1]
 
 		// 汉化 tags
-		if config.Search.UseEhTagTranslation || flagEhTagTranslation {
+		if config.Search.EhTagTranslation {
 			result.Tags = EHentai.TranslateMulti(result.Tags)
 		}
 
@@ -238,7 +257,7 @@ func searchDetail(ctx context.Context, site EHentai.Domain, keyword string, cate
 			gallery.Posted = posted.Format("2006-01-02 15:04:05")
 		}
 		// 汉化 tags
-		if config.Search.UseEhTagTranslation || flagEhTagTranslation {
+		if config.Search.EhTagTranslation {
 			gallery.Tags = EHentai.TranslateMulti(gallery.Tags)
 		}
 
@@ -248,7 +267,7 @@ func searchDetail(ctx context.Context, site EHentai.Domain, keyword string, cate
 		}
 		url := fmt.Sprintf("https://%s/g/%d/%s/", site, gallery.GId, gallery.Token)
 		// 列出所有种子
-		if config.Search.ShowTorrentDetails {
+		if config.Search.TorrentDetail {
 			if err := tmpl.ExecuteTemplate(os.Stdout, "torrent", gallery.Torrents); err != nil {
 				searchLog.Fatalf("failed to execute torrent template: %v", err)
 			}

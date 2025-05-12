@@ -80,6 +80,9 @@ func (c Category) Format() string {
 var ErrUnknownCategory = errors.New("unknown category")
 
 func ParseCategory(ss ...string) (cat Category, err error) {
+	if len(ss) == 0 {
+		return 0, nil
+	}
 	replacer := strings.NewReplacer(
 		"-", "",
 		"_", "",

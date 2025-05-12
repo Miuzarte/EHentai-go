@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"iter"
 	"net/url"
 	"slices"
 	"strings"
@@ -11,11 +10,12 @@ import (
 
 	"github.com/Miuzarte/EHentai-go"
 	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/bar"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/config"
-	"github.com/Miuzarte/EHentai-go/cmd/EHentai-cli/internal/errors"
+	"github.com/Miuzarte/EHentai-go/internal/env"
 	"github.com/Miuzarte/EHentai-go/internal/utils"
 	"github.com/Miuzarte/SimpleLog"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/vbauerster/mpb/v8"
 )
 
@@ -29,20 +29,20 @@ const downloadDescLong = downloadDesc +
 	"\n" + "start is inclusive, end is exclusive" +
 	"\n" + "negative index is allowed" +
 	"\n" + "e.g." +
-	"\n" + "\"[3:-1]\": start from 3rd page without last page"
-
-var pageRange string
+	"\n" + "\"-p [3:-1]\": start from the 3rd page and without last page"
 
 var downloadCmd = &cobra.Command{
 	Use:   "download <gallery/page url>... [-p <page range>]",
 	Short: downloadDesc,
 	Long:  downloadDescLong,
 	Args:  cobra.MinimumNArgs(1),
-	PreRunE: func(_ *cobra.Command, _ []string) (err error) {
-		return config.InitConfig()
+	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		downloadFlagChanged(cmd.Flags())
+		return initConfig(cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		// 解析切片
+		pageRange, _ := cmd.Flags().GetString(FLAG_PAGES)
 		var sliceSyntaxes utils.SliceSyntaxes
 		if pageRange != "" {
 			sliceSyntaxes, err = utils.ParseSliceSyntaxes(pageRange)
@@ -55,7 +55,8 @@ var downloadCmd = &cobra.Command{
 		var galleries []string
 		var pages []string
 		for i, arg := range args {
-			u, err := url.Parse(arg)
+			var u *url.URL
+			u, err = url.Parse(arg)
 			if err != nil {
 				return fmt.Errorf("invalid url[%d]: %s", i, arg)
 			}
@@ -70,35 +71,36 @@ var downloadCmd = &cobra.Command{
 				pages = append(pages, u.String())
 
 			default:
-				return fmt.Errorf("invalid url[%d]: %s", i, arg)
+				dlLog.Warnf("invalid url[%d]: %s", i, arg)
+				if !utils.WaitAck("continue?") {
+					return ErrAborted
+				}
 			}
 		}
-
-		if len(sliceSyntaxes) != 0 && len(args) > 1 {
-			dlLog.Warn("you are using page range in multiple urls")
-			var input string
-			fmt.Print("continue? (y/n): ")
-			fmt.Scanln(&input)
-			if input != "y" && input != "Y" {
-				err = errors.Aborted
-				return
-			}
+		if len(galleries) == 0 && len(pages) == 0 {
+			dlLog.Error("no valid url found")
+			return ErrHandled
 		}
 
-		var dl *ehentaiDownload
-		dl, err = galleryDownload(cmd.Context(), galleries, sliceSyntaxes)
-		if err != nil {
-			return
+		if len(sliceSyntaxes) != 0 && len(galleries) > 1 {
+			dlLog.Warn("you are using page range in multiple galleries")
+			if !utils.WaitAck("continue?") {
+				return ErrAborted
+			}
 		}
 
 		// galleries
-		for _, gId := range dl.GIds {
-			dlLog.Info("downloading: ", dl.GalleryUrls[gId])
-			for page, dlErr := range dl.downloadIter(cmd.Context(), gId) {
-				if dlErr != nil {
-					dlLog.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
-					continue
-				}
+		if len(galleries) != 0 {
+			var dl *ehentaiDownload
+			dl, err = galleryDownload(cmd.Context(), galleries, sliceSyntaxes)
+			if err != nil {
+				return
+			}
+
+			err = dl.download()
+			if err != nil {
+				dlLog.Error("failed to download: ", err)
+				return ErrHandled
 			}
 		}
 
@@ -107,19 +109,16 @@ var downloadCmd = &cobra.Command{
 			if len(sliceSyntaxes) != 0 {
 				dlLog.Warn("slice syntax will be ignored for pages download")
 			}
+			var dl *ehentaiDownload
 			dl, err = pagesDownload(cmd.Context(), pages)
 			if err != nil {
 				return
 			}
 
-			for _, gId := range dl.GIds {
-				dlLog.Info("downloading: ", dl.GalleryUrls[gId])
-				for page, dlErr := range dl.downloadIter(cmd.Context(), gId) {
-					if dlErr != nil {
-						dlLog.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
-						continue
-					}
-				}
+			err = dl.download()
+			if err != nil {
+				dlLog.Error("failed to download: ", err)
+				return ErrHandled
 			}
 		}
 
@@ -131,9 +130,54 @@ var downloadCmd = &cobra.Command{
 	},
 }
 
+const (
+	FLAG_THREADS         = "threads"
+	FLAG_PROGRESS        = "progress"
+	FLAG_RETRY           = "retry"
+	FLAG_ENV_PROXY       = "env-proxy"
+	FLAG_DOMAIN_FRONTING = "domain-fronting"
+	FLAG_DIR             = "dir"
+
+	FLAG_PAGES = "pages"
+)
+
 func init() {
-	downloadCmd.Flags().StringVarP(&pageRange, "pages", "p", "", "Specify page range (e.g. [3:-3])")
+	downloadCmd.Flags().Int(FLAG_THREADS, 8, "number of threads to use for downloading")
+	downloadCmd.Flags().Bool(FLAG_PROGRESS, true, "show progress bar")
+	downloadCmd.Flags().IntP(FLAG_RETRY, "r", 2, "letry broken images")
+	downloadCmd.Flags().Bool(FLAG_ENV_PROXY, true, "look up proxy from environment variables")
+	downloadCmd.Flags().Bool(FLAG_DOMAIN_FRONTING, false, "enable domain fronting")
+	downloadCmd.Flags().String(FLAG_DIR, env.XDir, "directory to save downloaded files")
+
+	downloadCmd.Flags().StringP(FLAG_PAGES, "p", "", "specify gallery pages range (e.g. [3:-3])")
 	rootCmd.AddCommand(downloadCmd)
+}
+
+func downloadFlagChanged(downloadFlags *pflag.FlagSet) {
+	if downloadFlags.Changed(FLAG_THREADS) {
+		threads, _ := downloadFlags.GetInt(FLAG_THREADS)
+		viper.Set("download.threads", threads)
+	}
+	if downloadFlags.Changed(FLAG_PROGRESS) {
+		progress, _ := downloadFlags.GetBool(FLAG_PROGRESS)
+		viper.Set("download.progressBar", progress)
+	}
+	if downloadFlags.Changed(FLAG_RETRY) {
+		retry, _ := downloadFlags.GetInt(FLAG_RETRY)
+		viper.Set("download.retryDepth", retry)
+	}
+	if downloadFlags.Changed(FLAG_ENV_PROXY) {
+		envProxy, _ := downloadFlags.GetBool(FLAG_ENV_PROXY)
+		viper.Set("download.envProxy", envProxy)
+	}
+	if downloadFlags.Changed(FLAG_DOMAIN_FRONTING) {
+		domainFronting, _ := downloadFlags.GetBool(FLAG_DOMAIN_FRONTING)
+		viper.Set("download.domainFronting", domainFronting)
+	}
+	if downloadFlags.Changed(FLAG_DIR) {
+		dir, _ := downloadFlags.GetString(FLAG_DIR)
+		viper.Set("download.dir", dir)
+	}
 }
 
 type ehentaiDownload struct {
@@ -142,32 +186,10 @@ type ehentaiDownload struct {
 	GalleryUrls map[int]string
 	PageUrls    map[int][]string // 对应画廊要下载的链接, 长度可能小于 .Totals
 
+	ctx      context.Context
 	progress *mpb.Progress
 	bar      *mpb.Bar
 	start    time.Time
-}
-
-func (ep *ehentaiDownload) initProgressBar(ctx context.Context, total int64) {
-	if !config.Download.ProgressBar {
-		return
-	}
-	ep.progress = mpb.NewWithContext(ctx, bar.RefreshRate)
-	ep.bar = ep.progress.New(total,
-		bar.BarStyleMain,
-		mpb.PrependDecorators(
-			bar.Spinner,
-			bar.ETA,
-		),
-		mpb.BarRemoveOnComplete(),
-	)
-	ep.bar.SetPriority(bar.Priority())
-}
-
-func (ep *ehentaiDownload) pbIncr(n int64) {
-	if !config.Download.ProgressBar {
-		return
-	}
-	ep.bar.EwmaIncrInt64(n, time.Since(ep.start))
 }
 
 func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceSyntaxes) (ep *ehentaiDownload, err error) {
@@ -176,6 +198,8 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 		Gallerys:    make(map[int]EHentai.Gallery, len(galleryUrls)),
 		GalleryUrls: make(map[int]string, len(galleryUrls)),
 		PageUrls:    make(map[int][]string, len(galleryUrls)),
+
+		ctx: ctx,
 	}
 
 	// 按原顺序收集画廊 ID 和 URL
@@ -224,7 +248,7 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 	for _, urls := range ep.PageUrls {
 		n += len(urls)
 	}
-	ep.initProgressBar(ctx, int64(n))
+	ep.pbInit(ctx, int64(n))
 
 	return
 }
@@ -242,6 +266,8 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 		Gallerys:    make(map[int]EHentai.Gallery, len(gPageUrls)),
 		GalleryUrls: make(map[int]string, len(gPageUrls)),
 		PageUrls:    gPageUrls,
+
+		ctx: ctx,
 	}
 
 	// 排序画廊 ID
@@ -283,26 +309,58 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 	for _, urls := range ep.PageUrls {
 		n += len(urls)
 	}
-	ep.initProgressBar(ctx, int64(n))
+	ep.pbInit(ctx, int64(n))
 
 	return
 }
 
-func (ep *ehentaiDownload) downloadIter(ctx context.Context, gId int) iter.Seq2[EHentai.PageData, error] {
-	return func(yield func(EHentai.PageData, error) bool) {
+func (dl *ehentaiDownload) download() (err error) {
+	for _, gId := range dl.GIds {
+		dlLog.Info("downloading: ", dl.GalleryUrls[gId])
+
 		// 手动为画廊创建缓存
-		if EHentai.GetCache(ep.Gallerys[gId].GalleryId) == nil {
-			_, err := EHentai.CreateCacheFromUrl(ep.GalleryUrls[gId])
+		if EHentai.GetCache(dl.Gallerys[gId].GalleryId) == nil {
+			_, err = EHentai.CreateCacheFromUrl(dl.GalleryUrls[gId])
 			if err != nil {
-				yield(EHentai.PageData{}, err)
-				return
+				dlLog.Error("failed to create: ", err)
+				return ErrHandled
 			}
 		}
-		for page, err := range EHentai.DownloadPagesIter(ctx, ep.PageUrls[gId]...) {
-			ep.pbIncr(1)
-			if yield(page, err) {
+
+		for page, dlErr := range EHentai.DownloadPagesIter(dl.ctx, dl.PageUrls[gId]...) {
+			dl.pbIncr(1)
+			if dlErr != nil {
+				err = dlErr
+				dlLog.Errorf("failed to download gallery %d page %d: %v", gId, page.PageNum, dlErr)
+				if !utils.WaitAck("continue?") {
+					return ErrAborted
+				}
 				continue
 			}
 		}
 	}
+	return nil
+}
+
+func (dl *ehentaiDownload) pbInit(ctx context.Context, total int64) {
+	if !config.Download.ProgressBar {
+		return
+	}
+	dl.progress = mpb.NewWithContext(ctx, bar.RefreshRate)
+	dl.bar = dl.progress.New(total,
+		bar.BarStyleMain,
+		mpb.PrependDecorators(
+			bar.Spinner,
+			bar.ETA,
+		),
+		mpb.BarRemoveOnComplete(),
+	)
+	dl.bar.SetPriority(bar.Priority())
+}
+
+func (dl *ehentaiDownload) pbIncr(n int64) {
+	if !config.Download.ProgressBar {
+		return
+	}
+	dl.bar.EwmaIncrInt64(n, time.Since(dl.start))
 }
