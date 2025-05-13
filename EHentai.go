@@ -125,6 +125,7 @@ func FreeEhTagDB() {
 	ehTagDatabase.Free()
 }
 
+// UnmarshalEhTagDB 手动将 json 反序列化至 EhTagTranslation 数据库
 func UnmarshalEhTagDB(data string) error {
 	return ehTagDatabase.Unmarshal(data)
 }

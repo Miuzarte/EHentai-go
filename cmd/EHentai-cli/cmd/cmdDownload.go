@@ -24,6 +24,7 @@ var dlLog = SimpleLog.New("[Download]", true, false)
 const downloadDesc = "Download gallery or pages, using slice syntax(allow negative) to specify page range"
 
 const downloadDescLong = downloadDesc +
+	"\n" + "Support multiple urls" +
 	"\n" + "Help for slice syntax: " +
 	"\n" + "[start:end] / [:end] / [start:] / [index]" +
 	"\n" + "start is inclusive, end is exclusive" +
@@ -192,8 +193,8 @@ type ehentaiDownload struct {
 	start    time.Time
 }
 
-func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceSyntaxes) (ep *ehentaiDownload, err error) {
-	ep = &ehentaiDownload{
+func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceSyntaxes) (dl *ehentaiDownload, err error) {
+	dl = &ehentaiDownload{
 		GIds:        make([]int, len(galleryUrls)),
 		Gallerys:    make(map[int]EHentai.Gallery, len(galleryUrls)),
 		GalleryUrls: make(map[int]string, len(galleryUrls)),
@@ -206,27 +207,27 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 	// 画廊 ID 作为 map 的 key
 	for i := range galleryUrls {
 		g := EHentai.UrlToGallery(galleryUrls[i])
-		ep.GIds[i] = g.GalleryId
-		ep.Gallerys[g.GalleryId] = g
-		ep.GalleryUrls[g.GalleryId] = galleryUrls[i]
+		dl.GIds[i] = g.GalleryId
+		dl.Gallerys[g.GalleryId] = g
+		dl.GalleryUrls[g.GalleryId] = galleryUrls[i]
 	}
 
 	// 获取画廊元数据
-	gl := make([]EHentai.GIdList, len(ep.GIds))
-	for i, gId := range ep.GIds {
-		gl[i] = ep.Gallerys[gId]
+	gl := make([]EHentai.GIdList, len(dl.GIds))
+	for i, gId := range dl.GIds {
+		gl[i] = dl.Gallerys[gId]
 	}
 	resp, err := EHentai.PostGalleryMetadata(ctx, gl...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.GMetadata) != len(ep.GIds) {
-		return nil, fmt.Errorf("len(resp.GMetadata)(%d) != len(ep.GIds)(%d)", len(resp.GMetadata), len(ep.GIds))
+	if len(resp.GMetadata) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(resp.GMetadata)(%d) != len(dl.GIds)(%d)", len(resp.GMetadata), len(dl.GIds))
 	}
 
 	// 获取画廊页链接 同时解析 [utils.SliceSyntaxes]
-	for _, gId := range ep.GIds {
-		pageUrls, err := EHentai.FetchGalleryPageUrls(ctx, ep.GalleryUrls[gId])
+	for _, gId := range dl.GIds {
+		pageUrls, err := EHentai.FetchGalleryPageUrls(ctx, dl.GalleryUrls[gId])
 		if err != nil {
 			return nil, err
 		}
@@ -240,20 +241,20 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 			pageUrls = utils.DoIndexes(pageUrls, indexes)
 		}
 
-		ep.PageUrls[gId] = pageUrls
+		dl.PageUrls[gId] = pageUrls
 	}
 
 	// 进度条
 	n := 0
-	for _, urls := range ep.PageUrls {
+	for _, urls := range dl.PageUrls {
 		n += len(urls)
 	}
-	ep.pbInit(ctx, int64(n))
+	dl.pbInit(ctx, int64(n))
 
 	return
 }
 
-func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload, err error) {
+func pagesDownload(ctx context.Context, pageUrls []string) (dl *ehentaiDownload, err error) {
 	// 从 pageUrls 中整理出画廊
 	gPageUrls := make(map[int][]string)
 	for i := range pageUrls {
@@ -261,7 +262,7 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 		gPageUrls[g.GalleryId] = append(gPageUrls[g.GalleryId], pageUrls[i])
 	}
 
-	ep = &ehentaiDownload{
+	dl = &ehentaiDownload{
 		GIds:        make([]int, 0, len(gPageUrls)),
 		Gallerys:    make(map[int]EHentai.Gallery, len(gPageUrls)),
 		GalleryUrls: make(map[int]string, len(gPageUrls)),
@@ -272,44 +273,44 @@ func pagesDownload(ctx context.Context, pageUrls []string) (ep *ehentaiDownload,
 
 	// 排序画廊 ID
 	// 画廊 ID 作为 map 的 key
-	for gId := range ep.PageUrls {
-		ep.GIds = append(ep.GIds, gId)
+	for gId := range dl.PageUrls {
+		dl.GIds = append(dl.GIds, gId)
 	}
-	slices.Sort(ep.GIds)
+	slices.Sort(dl.GIds)
 
 	// 从每个画廊中取一个 P
 	// 获取画廊 token
-	pageList := make([]EHentai.PageList, len(ep.GIds))
-	for i, gId := range ep.GIds {
-		pageList[i] = EHentai.UrlToPage(ep.PageUrls[gId][0])
+	pageList := make([]EHentai.PageList, len(dl.GIds))
+	for i, gId := range dl.GIds {
+		pageList[i] = EHentai.UrlToPage(dl.PageUrls[gId][0])
 	}
 	resp1, err := EHentai.PostGalleryToken(ctx, pageList...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp1.TokenLists) != len(ep.GIds) {
-		return nil, fmt.Errorf("len(resp1.TokenLists)(%d) != len(ep.GIds)(%d)", len(resp1.TokenLists), len(ep.GIds))
+	if len(resp1.TokenLists) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(resp1.TokenLists)(%d) != len(dl.GIds)(%d)", len(resp1.TokenLists), len(dl.GIds))
 	}
 
 	// 获取画廊元数据
-	gl := make([]EHentai.GIdList, len(ep.GIds))
-	for i := range ep.GIds {
+	gl := make([]EHentai.GIdList, len(dl.GIds))
+	for i := range dl.GIds {
 		gl[i] = resp1.TokenLists[i].ToGallery()
 	}
 	resp2, err := EHentai.PostGalleryMetadata(ctx, gl...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp2.GMetadata) != len(ep.GIds) {
-		return nil, fmt.Errorf("len(resp2.GMetadata)(%d) != len(ep.GIds)(%d)", len(resp2.GMetadata), len(ep.GIds))
+	if len(resp2.GMetadata) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(resp2.GMetadata)(%d) != len(dl.GIds)(%d)", len(resp2.GMetadata), len(dl.GIds))
 	}
 
 	// 进度条
 	n := 0
-	for _, urls := range ep.PageUrls {
+	for _, urls := range dl.PageUrls {
 		n += len(urls)
 	}
-	ep.pbInit(ctx, int64(n))
+	dl.pbInit(ctx, int64(n))
 
 	return
 }

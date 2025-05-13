@@ -9,7 +9,9 @@ import (
 
 const ehCliDesc = "A command line tool for E(x)Hentai search/gallery download/pages download"
 
-const ehCliDescLong = ehCliDesc // TODO
+const ehCliDescLong = ehCliDesc +
+	"\n" + `"EHcli search <keyword>" to search gallery` +
+	"\n" + `"EHcli download <gallery/page url>..." to download gallery or pages`
 
 var rootLog = SimpleLog.New("[EHcli]", true, false)
 
@@ -45,8 +47,8 @@ const (
 func init() {
 	rootCmd.PersistentFlags().StringP(FLAG_CONFIG, "c", "", "path to config file")
 
-	rootCmd.PersistentFlags().Bool(FLAG_TRACE, false, "enable trace mode")
-	rootCmd.PersistentFlags().Bool(FLAG_DEBUG, false, "enable debug mode")
+	rootCmd.PersistentFlags().Bool(FLAG_TRACE, false, "set log level to trace")
+	rootCmd.PersistentFlags().Bool(FLAG_DEBUG, false, "set log level to debug")
 	rootCmd.MarkFlagsMutuallyExclusive(FLAG_TRACE, FLAG_DEBUG)
 
 	rootCmd.PersistentFlags().String(FLAG_COOKIE, "", "well... cookie")

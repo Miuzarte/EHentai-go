@@ -75,7 +75,8 @@ func initTemplate() {
 
 const searchDesc = "Search for galleries by keyword"
 
-const searchDescLong = searchDesc // TODO
+const searchDescLong = searchDesc +
+	"\n" + "If there are any spaces in the keyword, no need to quote it"
 
 var searchCmd = &cobra.Command{
 	Use:   "search <keyword>",
@@ -118,7 +119,7 @@ const (
 	FLAG_EX   = "ex"
 	FLAG_SITE = "site"
 
-	FLAG_EH_TAG         = "eh-tag"
+	FLAG_EH_TAG         = "tag-translation"
 	FLAG_CAT            = "cat"
 	FLAG_DETAIL         = "detail"
 	FLAG_TORRENT_DETAIL = "torrent-detail"
