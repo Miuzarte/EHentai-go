@@ -1,3 +1,4 @@
 EHentaiCache/
 cmd/EHentai-cli/EHcli*
 cmd/EHentai-cli/config.*
+cmd/EHentai-cli/ehTagDB_*

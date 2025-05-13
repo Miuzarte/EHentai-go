@@ -173,22 +173,6 @@ func searchFlagChanged(searchFlags *pflag.FlagSet) {
 	}
 }
 
-// 搜索完再初始化数据库,
-// 以免无结果时浪费时间
-func initEhTagDb() (err error) {
-	// TODO: database cache
-	if config.Search.EhTagTranslation {
-		searchLog.Debug("init EhTagTranslation database...")
-		tn := time.Now()
-		err = EHentai.InitEhTagDB()
-		if err != nil {
-			return
-		}
-		searchLog.Debugf("init EhTagTranslation database took %s", time.Since(tn))
-	}
-	return nil
-}
-
 func search(ctx context.Context, site EHentai.Domain, keyword string, categories ...EHentai.Category) (total int, err error) {
 	var results EHentai.FSearchResults
 	switch site {
@@ -200,7 +184,7 @@ func search(ctx context.Context, site EHentai.Domain, keyword string, categories
 	if err != nil {
 		return 0, err
 	}
-	if err := initEhTagDb(); err != nil {
+	if err := initEhTagDB(); err != nil {
 		searchLog.Error("failed to init EhTagTranslation database: ", err)
 	}
 
@@ -234,7 +218,7 @@ func searchDetail(ctx context.Context, site EHentai.Domain, keyword string, cate
 	if err != nil {
 		return 0, err
 	}
-	if err := initEhTagDb(); err != nil {
+	if err := initEhTagDB(); err != nil {
 		searchLog.Error("failed to init EhTagTranslation database: ", err)
 	}
 

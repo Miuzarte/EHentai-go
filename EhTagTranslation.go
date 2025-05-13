@@ -2,38 +2,47 @@ package EHentai
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/tidwall/gjson"
 )
 
-const DATABASE_URL = `https://github.com/EhTagTranslation/Database/releases/latest/download/db.text.json`
+const EHTAG_DATABASE_URL = `https://github.com/EhTagTranslation/Database/releases/latest/download/db.text.json`
 
 // map[namespace]map[<tag>]name
 type EhTagDatabase map[string]map[string]string
 
-var ehTagDatabase = make(EhTagDatabase)
+var ehTagDatabase EhTagDatabase
 
 func (db *EhTagDatabase) Ok() bool {
-	return len(*db) != 0
+	return *db != nil
 }
 
 func (db *EhTagDatabase) Free() {
-	*db = make(EhTagDatabase)
+	*db = nil
 }
 
 func (db *EhTagDatabase) Init() error {
-	data, err := db.Download(DATABASE_URL)
+	resp, err := http.Get(EHTAG_DATABASE_URL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
 	// tn := time.Now()
-	err = db.Unmarshal(data)
+	// 切片不会发生修改
+	// 解析失败时保存 json 到文件
+	err = db.unmarshal(unsafe.String(unsafe.SliceData(data), len(data)))
 	// fmt.Println("database unmarshaled in", time.Since(tn))
 	if err != nil {
 		return err
@@ -42,67 +51,66 @@ func (db *EhTagDatabase) Init() error {
 	return nil
 }
 
-func (db *EhTagDatabase) Download(url string) ([]byte, error) {
-	// 不使用受外部控制的 [httpClient],
-	// 避免走不到代理
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
+func (db *EhTagDatabase) doUnmarshal(data string) (int, error) {
+	datasArr := gjson.Parse(data).Get("data").Array()
+	if len(datasArr) == 0 {
+		return 0, errors.New("empty data array")
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) == 0 {
-		return nil, errors.New("empty downloaded content")
-	}
-	return data, nil
-}
-
-func (db *EhTagDatabase) Unmarshal(data []byte) error {
-	jDataArr := gjson.ParseBytes(data).Get("data").Array()
-	if len(jDataArr) == 0 {
-		fs, err := os.Open("EhTagTranslation_dump.txt")
-		if err == nil {
-			fs.Write(data)
-			fs.Close()
-		}
-		return errors.New("failed to parse json")
-	}
+	*db = make(EhTagDatabase, len(datasArr)) // 包括 rows
 
 	// 内容索引, data 内为所有的 namespace
-	rows := jDataArr[0]
-	(*db)["rows"] = make(map[string]string)
-	for namespace, values := range rows.Get("data").Map() {
-		// namespace 对应的翻译
+	rows := datasArr[0]
+	rowData := rows.Get("data").Map()
+	(*db)["rows"] = make(map[string]string, len(rowData))
+	for namespace, values := range rowData {
 		(*db)["rows"][namespace] = values.Get("name").String()
-		// 创建所有 namespace 对应的 map
-		(*db)[namespace] = make(map[string]string)
 	}
 
 	// 解析每个 namespace
 	wg := sync.WaitGroup{}
-	wg.Add(len(jDataArr) - 1)
-	for i, data := range jDataArr {
+	wg.Add(len(datasArr) - 1)
+	for i, data := range datasArr {
 		if i == 0 {
 			continue
 		}
-		go func() { // tag 对应的翻译
+		namespace := data.Get("namespace").String()
+		namespaceData := data.Get("data").Map()
+		m := make(map[string]string, len(namespaceData))
+		(*db)[namespace] = m
+		go func(namespaceData map[string]gjson.Result, m map[string]string) {
 			defer wg.Done()
-			namespace := data.Get("namespace").String()
-			for tag, value := range data.Get("data").Map() {
-				(*db)[namespace][tag] = value.Get("name").String()
+			for tag, value := range namespaceData {
+				m[tag] = value.Get("name").String()
 			}
-		}()
+		}(namespaceData, m)
 	}
 	wg.Wait()
 
-	return nil
+	return len(datasArr), nil
 }
 
+// Unmarshal 解析 json 到数据库
+func (db *EhTagDatabase) Unmarshal(data string) error {
+	_, err := db.doUnmarshal(data)
+	return err
+}
+
+// unmarshal 解析 json 到数据库, 失败时保存 json 到文件
+func (db *EhTagDatabase) unmarshal(data string) error {
+	n, err := db.doUnmarshal(data)
+	if err != nil && n == 0 {
+		_ = os.WriteFile("EhTagTranslation_dump.txt", []byte(data), 0o644)
+		return fmt.Errorf("failed to parse json, tag db dumped: %w", err)
+	}
+	return err
+}
+
+// Info 返回数据库统计信息
 func (db *EhTagDatabase) Info() map[string]int {
-	namespacesLen := make(map[string]int)
+	if !db.Ok() {
+		return nil
+	}
+	namespacesLen := make(map[string]int, len(*db))
 	for namespace, tags := range *db {
 		namespacesLen[namespace] = len(tags)
 	}
@@ -110,6 +118,9 @@ func (db *EhTagDatabase) Info() map[string]int {
 }
 
 func (db *EhTagDatabase) TranslateMulti(tags []string) []string {
+	if !db.Ok() {
+		return tags
+	}
 	t := make([]string, len(tags))
 	for i, tag := range tags {
 		t[i] = db.Translate(tag)
@@ -118,10 +129,15 @@ func (db *EhTagDatabase) TranslateMulti(tags []string) []string {
 }
 
 func (db *EhTagDatabase) Translate(tag string) string {
+	if !db.Ok() {
+		return tag
+	}
 	s := strings.Split(tag, ":")
 	if len(s) == 2 {
-		if name, ok := (*db)[s[0]][s[1]]; ok {
-			return name
+		if ns, ok := (*db)[s[0]]; ok {
+			if name, ok := ns[s[1]]; ok {
+				return name
+			}
 		}
 	}
 	return tag

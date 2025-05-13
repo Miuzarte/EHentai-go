@@ -125,13 +125,14 @@ func FreeEhTagDB() {
 	ehTagDatabase.Free()
 }
 
+func UnmarshalEhTagDB(data string) error {
+	return ehTagDatabase.Unmarshal(data)
+}
+
 // TranslateMulti 翻译多个 tag,
 // 输入格式应为: namespace:tag,
 // 若数据库未初始化, 则返回入参
 func TranslateMulti(tags []string) []string {
-	if !ehTagDatabase.Ok() {
-		return tags
-	}
 	return ehTagDatabase.TranslateMulti(tags)
 }
 
@@ -139,9 +140,6 @@ func TranslateMulti(tags []string) []string {
 // 输入格式应为: namespace:tag,
 // 若数据库未初始化, 则返回入参
 func Translate(tag string) string {
-	if !ehTagDatabase.Ok() {
-		return tag
-	}
 	return ehTagDatabase.Translate(tag)
 }
 

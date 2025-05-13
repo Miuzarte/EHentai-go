@@ -44,8 +44,8 @@ dir = '' # '--dir'
 site = 'e-hentai.org' # '-e' '--eh' '--site e-hentai.org'
 # site = 'exhentai.org' # '-x' '--ex' '--site exhentai.org'
 # 标签翻译
-# 每次运行都需要从 GitHub 拉取数据, 弱网慎用
-ehTagTranslation = false # '-t' '--eh-tag'
+# 启用时会在二进制可执行文件所在目录缓存数据库
+ehTagTranslation = true # '-t' '--eh-tag'
 # 'MISC'      // 杂项
 # 'DOUJINSHI' // 同人志
 # 'MANGA'     // 漫画
