@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Miuzarte/EHentai-go"
+	"github.com/Miuzarte/EHentai-go/internal/env"
 	"github.com/Miuzarte/EHentai-go/internal/utils"
 	"github.com/Miuzarte/SimpleLog"
 	"github.com/spf13/cobra"
@@ -19,34 +21,11 @@ import (
 
 var searchLog = SimpleLog.New("[Search]", true, false)
 
-const resultTemplate = //
-`{{define "result"}}{{.Title}}
-{{Join .Tags ", "}}
-{{.Cat}} | {{.Rating}}⭐ | {{.Pages}}
-{{Hyperlink .Url}}
-{{end}}`
-
-const galleryTemplate = //
-`{{define "gallery"}}{{.TitleJpn}}
-{{Join .Tags ", "}}
-{{.Category}} | {{.Rating}}⭐ | {{.FileCount}} pages | RawSize: {{FmtBytes .FileSize}}
-Posted: {{.Posted}} | TorrentCount: {{.TorrentCount}}{{if .ParentGId}}
-Parent: {{.ParentGId}} | ParentKey: {{.ParentKey}}{{end}}{{if .FirstGId}}
-First: {{.FirstGId}} | FirstKey: {{.FirstKey}}{{end}}
-{{end}}`
-
-const torrentTemplate = //
-`{{define "torrent"}}{{range .}}{{.Name}}
-{{FmtBytesStr .FSize}}
-{{.Added}}
-{{.Hash}}
-{{FmtBytesStr .TSize}}
-{{end}}{{end}}`
-
 var tmpl *template.Template
 
 func initTemplate() {
-	// TODO: read custom template dynamically
+	// DONE: read custom template dynamically
+	// TODO: figure out how to add funcs externally
 	tmpl = template.New("EHentai-cli")
 	tmpl.Funcs(template.FuncMap{
 		"Join":      strings.Join,
@@ -59,18 +38,78 @@ func initTemplate() {
 	})
 
 	var err error
-	tmpl, err = tmpl.Parse(resultTemplate)
+	tmpl, err = tmpl.Parse(getResultTempate())
 	if err != nil {
 		searchLog.Fatalf("failed to parse result template: %v", err)
 	}
-	tmpl, err = tmpl.Parse(galleryTemplate)
+	tmpl, err = tmpl.Parse(getgalleryTemplate())
 	if err != nil {
 		searchLog.Fatalf("failed to parse gallery template: %v", err)
 	}
-	tmpl, err = tmpl.Parse(torrentTemplate)
+	tmpl, err = tmpl.Parse(gettorrentTemplate())
 	if err != nil {
 		searchLog.Fatalf("failed to parse torrent template: %v", err)
 	}
+}
+
+const resultTemplate = //
+`{{define "result"}}{{.Title}}
+{{Join .Tags ", "}}
+{{.Cat}} | {{.Rating}}⭐ | {{.Pages}}
+{{Hyperlink .Url}}
+{{end}}`
+const resultTemplatePath = `result.tmpl`
+
+func getResultTempate() string {
+	data, err := os.ReadFile(filepath.Join(env.XDir, resultTemplatePath))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			searchLog.Warn("failed to read result template: ", err)
+		}
+		return resultTemplate
+	}
+	return string(data)
+}
+
+const galleryTemplate = //
+`{{define "gallery"}}{{.TitleJpn}}
+{{Join .Tags ", "}}
+{{.Category}} | {{.Rating}}⭐ | {{.FileCount}} pages | RawSize: {{FmtBytes .FileSize}}
+Posted: {{.Posted}} | TorrentCount: {{.TorrentCount}}{{if .ParentGId}}
+Parent: {{.ParentGId}} | ParentKey: {{.ParentKey}}{{end}}{{if .FirstGId}}
+First: {{.FirstGId}} | FirstKey: {{.FirstKey}}{{end}}
+{{end}}`
+const galleryTemplatePath = `gallery.tmpl`
+
+func getgalleryTemplate() string {
+	data, err := os.ReadFile(filepath.Join(env.XDir, galleryTemplatePath))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			searchLog.Warn("failed to read result template: ", err)
+		}
+		return galleryTemplate
+	}
+	return string(data)
+}
+
+const torrentTemplate = //
+`{{define "torrent"}}{{range .}}{{.Name}}
+{{FmtBytesStr .FSize}}
+{{.Added}}
+{{.Hash}}
+{{FmtBytesStr .TSize}}
+{{end}}{{end}}`
+const torrentTemplatePath = `torrent.tmpl`
+
+func gettorrentTemplate() string {
+	data, err := os.ReadFile(filepath.Join(env.XDir, torrentTemplatePath))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			searchLog.Warn("failed to read result template: ", err)
+		}
+		return torrentTemplate
+	}
+	return string(data)
 }
 
 const searchDesc = "Search for galleries by keyword"
