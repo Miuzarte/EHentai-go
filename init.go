@@ -34,7 +34,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	domainFrontingInterceptor.IpProvider.(*EHRoundRobinIpProvider).h2IpsCopyFrom(host2Ips)
+	domainFrontingInterceptor.IpProvider.(*EHRoundRobinIpProvider).host2IpsCopyFrom(host2Ips)
 }
 
 // 读取环境变量

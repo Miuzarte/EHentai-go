@@ -365,7 +365,7 @@ func (cg *cacheGallery) readOne(pageInfo CachePageInfo) (pageData PageData, err 
 		}
 		return
 	}
-	pageData.Image = Image{Data: data, Type: ImageType(pageInfo.Type)}
+	pageData.Image = Image{Data: data, Type: ImageType(pageInfo.Type), TypeRaw: ImageType(pageInfo.Type).String()}
 	pageData.FromCache = true
 
 	return pageData, nil

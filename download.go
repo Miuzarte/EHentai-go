@@ -193,6 +193,42 @@ func (j *downloader) downloadIterImage() iter.Seq2[Image, error] {
 	}
 }
 
+var ErrWrongSliceSize = errors.New("wrong slice size")
+
+func (j *downloader) downloadPagesTo(f func(int, PageData, error)) error {
+	if j.firstYieldErr != nil {
+		return j.firstYieldErr
+	}
+	for i, item := range j.items {
+		go func() {
+			err := <-item.err
+			if err != nil {
+				f(i, PageData{}, err)
+				return
+			}
+			f(i, *item.page, nil)
+		}()
+	}
+	return nil
+}
+
+func (j *downloader) downloadImagesTo(f func(int, Image, error)) error {
+	if j.firstYieldErr != nil {
+		return j.firstYieldErr
+	}
+	for i, item := range j.items {
+		go func() {
+			err := <-item.err
+			if err != nil {
+				f(i, Image{}, err)
+				return
+			}
+			f(i, *item.img, nil)
+		}()
+	}
+	return nil
+}
+
 func (j *downloader) downloadPage() ([]PageData, error) {
 	results := make([]PageData, 0, len(j.items))
 	for img, err := range j.downloadIterPage() {
@@ -226,14 +262,14 @@ func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int
 	gId := UrlToGallery(galleryUrl).GalleryId
 
 	cg := GetCache(gId)
-	mc := MetaCacheRead(gId)
+	dc := DetailsCacheRead(gId)
 	if cg != nil {
 		pageUrls = pageUrlsToSlice(cg.meta.PageUrls)
 		availCache = make(map[int]*cacheGallery, 1)
 		availCache[gId] = cg
 
-	} else if mc != nil && len(mc.pageUrls) != 0 {
-		pageUrls = mc.pageUrls
+	} else if dc != nil && len(dc.PageUrls) != 0 {
+		pageUrls = dc.PageUrls
 	} else {
 		pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
 		if err != nil {
@@ -304,7 +340,7 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 	if len(data) == 0 {
 		return Image{}, wrapErr(ErrEmptyBody, imgUrl)
 	}
-	return Image{Data: data, Type: ParseImageType(contentTypeSplits[1])}, nil
+	return Image{Data: data, Type: ParseImageType(contentTypeSplits[1]), TypeRaw: contentTypeSplits[1]}, nil
 }
 
 // downloadPage 下载画廊某页的图片,

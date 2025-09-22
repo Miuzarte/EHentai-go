@@ -273,8 +273,8 @@ type EHRoundRobinIpProvider struct {
 	mu2            sync.Mutex
 }
 
-// h2IpsCopyFrom 复制 m 的内容到 p.host2Ips, 避免外部修改
-func (p *EHRoundRobinIpProvider) h2IpsCopyFrom(m map[string][]string) {
+// host2IpsCopyFrom 复制 m 的内容到 p.host2Ips, 避免外部修改
+func (p *EHRoundRobinIpProvider) host2IpsCopyFrom(m map[string][]string) {
 	p.mu1.Lock()
 	p.mu2.Lock()
 	defer p.mu1.Unlock()

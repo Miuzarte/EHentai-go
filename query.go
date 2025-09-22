@@ -130,12 +130,8 @@ var (
 	ErrNoImage             = errors.New("no image")
 	ErrEndGreaterThanTotal = errors.New("end > total")
 	ErrFoundEmptyPageUrl   = errors.New("found empty page url")
+	ErrNotANumber          = errors.New("not a number")
 )
-
-// Found about 192,819 results.
-// Found 2 results.
-// Found 1 result.
-var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
 
 func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
 	total, results, err := queryFSearch(ctx, url, keyword, categories...)
@@ -144,13 +140,56 @@ func searchDetail(ctx context.Context, url, keyword string, categories ...Catego
 	}
 	list := make([]Gallery, len(results))
 	for i := range results {
-		list[i] = Gallery{results[i].Gid, results[i].Token}
+		list[i] = results[i].Gallery
 	}
 	resp, err := PostGalleryMetadata(ctx, list...)
 	if err != nil {
 		return 0, nil, err
 	}
 	return total, resp.GMetadata, nil
+}
+
+// Found about 192,819 results.
+// Found 2 results.
+// Found 1 result.
+var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
+
+// 5   background-position:0px -1px;opacity:1
+// 4.5 background-position:0px -21px;opacity:1
+// 4   background-position:-16px -1px;opacity:1
+// 3.5 background-position:-16px -21px;opacity:1
+// 3   background-position:-32px -1px;opacity:1
+// 2.5 background-position:-32px -21px;opacity:1
+// 2   background-position:-48px -1px;opacity:1
+// 1.5 background-position:-48px -21px;opacity:1
+// 1   background-position:-64px -1px;opacity:1
+// 0.5 background-position:-64px -21px;opacity:1
+// 0   background-position:-80px -1px;opacity:1
+var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
+
+func parseStars(stars string) (rating float64) {
+	matches := starsReg.FindStringSubmatch(stars)
+	if len(matches) == 0 {
+		return 0
+	}
+	x, err := atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	y, err := atoi(matches[2])
+	if err != nil {
+		return 0
+	}
+
+	rating = 5.0 - float64(-x/16)
+	switch y {
+	case -1:
+	case -21:
+		rating -= 0.5
+	default:
+		rating -= float64(y+1) / 20.0
+	}
+	return
 }
 
 // total != len(results) 即不止一页
@@ -208,78 +247,334 @@ func queryFSearch(ctx context.Context, url, keyword string, categories ...Catego
 		if i == 0 { // 表头
 			return
 		}
-		// cat   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl1c.glcat > div"
-		// cover "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div > div > img"
-		// stars "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl2c > div > div.ir"
-		// url   "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a"
-		// tag1  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(1)"
-		// tag2  "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(3) > td.gl3c.glname > a > div:nth-child(2) > div:nth-child(2)"
-		// title "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl3c.glname > a > div.glink"
-		// pages "body > div.ido > div:nth-child(2) > table > tbody > tr:nth-child(2) > td.gl4c.glhide > div:nth-child(2)"
+
+		// cat      "td.gl1c.glcat > div"
+
+		// cover    "td.gl2c > div.glthumb > div:nth-child(1) > img"
+		// time     "td.gl2c > div:nth-child(3) > div:nth-child(1)"
+		// stars    "td.gl2c > div:nth-child(3) > div.ir"
+
+		// url   "td.gl3c.glname > a" // href
+		// title "td.gl3c.glname > a > div.glink"
+		// tags  "td.gl3c.glname > a > div:nth-child(2)"
+		// tag1  "td.gl3c.glname > a > div:nth-child(2) > div:nth-child(1)"
+		// tag2  "td.gl3c.glname > a > div:nth-child(2) > div:nth-child(2)"
+
+		// uploader "td.gl4c.glhide > div:nth-child(1) > a"
+		// pages    "td.gl4c.glhide > div:nth-child(2)"
+
+		// 分类
 		cat := s.Find("td.gl1c.glcat > div").Text()
-		cover, ok := s.Find("td.gl2c > div > div > img").Attr("data-src")
+
+		gl2c := s.Find("td.gl2c > div")
+		// 封面
+		cover, ok := gl2c.Find("div > img").Attr("data-src")
 		if !ok {
-			cover, _ = s.Find("td.gl2c > div > div > img").Attr("src")
+			cover, _ = gl2c.Find("div > img").Attr("src")
 		}
-		stars, _ := s.Find("td.gl2c > div > div.ir").Attr("style")
-		url, _ := s.Find("td.gl3c.glname > a").Attr("href")
+		// 上传时间
+		upTime := gl2c.Find("div:nth-child(3) > div:nth-child(1)").Text()
+		// 评分
+		stars, _ := gl2c.Find("div.ir").Attr("style")
+
+		gl3c := s.Find("td.gl3c.glname > a")
+		// 链接
+		url, _ := gl3c.Attr("href")
+		// 标题
+		title := gl3c.Find("div.glink").Text()
 		var tags []string
-		s.Find("td.gl3c.glname > a > div > div.gt").
-			Each(func(i int, s *goquery.Selection) {
-				tags = append(tags, s.AttrOr("title", s.Text()))
-			})
-		title := s.Find("td.gl3c.glname > a > div.glink").Text()
-		pages := s.Find("td.gl4c.glhide > div:nth-child(2)").Text()
-		domain, gId, gToken := UrlGetGIdGToken(url)
-		if gId, _ := atoi(gId); gId != 0 && gToken != "" {
-			results = append(results, FSearchResult{domain, gId, gToken, cat, cover, parseStars(stars), url, tags, title, pages})
+		// 标签
+		gl3c.Find("div:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+			tags = append(tags, s.AttrOr("title", s.Text()))
+		})
+
+		gl4c := s.Find("td.gl4c.glhide")
+		// 上传者
+		uploader := gl4c.Find("div:nth-child(1) > a").Text()
+		// 页数
+		pages := gl4c.Find("div:nth-child(2)").Text()
+		pages = strings.TrimSuffix(pages, " pages") // "65 pages"
+		var pagesNum int
+		pagesNum, err = atoi(pages)
+		if err != nil {
+			err = wrapErr(ErrNotANumber, pages)
+			return
 		}
+
+		domain, gId, gToken := UrlGetGIdGToken(url)
+		gIdNum, _ := atoi(gId)
+		results = append(results, FSearchResult{
+			Domain: domain,
+			Gallery: Gallery{
+				GalleryId:    gIdNum,
+				GalleryToken: gToken,
+			},
+
+			Cat: cat,
+
+			Cover:  cover,
+			Posted: upTime,
+			Rating: parseStars(stars),
+
+			Url:   url,
+			Title: title,
+			Tags:  tags,
+
+			Uploader: uploader,
+			Pages:    pagesNum,
+		})
 	})
 	return
-}
-
-// 5   background-position:0px -1px;opacity:1
-// 4.5 background-position:0px -21px;opacity:1
-// 4   background-position:-16px -1px;opacity:1
-// 3.5 background-position:-16px -21px;opacity:1
-// 3   background-position:-32px -1px;opacity:1
-// 2.5 background-position:-32px -21px;opacity:1
-// 2   background-position:-48px -1px;opacity:1
-// 1.5 background-position:-48px -21px;opacity:1
-// 1   background-position:-64px -1px;opacity:1
-// 0.5 background-position:-64px -21px;opacity:1
-// 0   background-position:-80px -1px;opacity:1
-var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
-
-func parseStars(stars string) (rating string) {
-	matches := starsReg.FindStringSubmatch(stars)
-	if len(matches) == 0 {
-		return ""
-	}
-	x, err := atoi(matches[1])
-	if err != nil {
-		return ""
-	}
-	y, err := atoi(matches[2])
-	if err != nil {
-		return ""
-	}
-	units := 5
-	decimal := 0
-	if y < -21 {
-		units -= 1
-		decimal = 5
-	}
-	units -= (-x / 16)
-	return itoa(units) + "." + itoa(decimal)
 }
 
 // Showing 1 - 20 of 65 images
 // Showing 1 - 5 of 5 images
 // Showing 1 - 1 of 1 image (?
-var numReg = regexp.MustCompile(`Showing 1 - (\d+) of (\d+) images?`)
+var (
+	numReg      = regexp.MustCompile(`Showing 1 - (\d+) of (\d+) images?`)
+	coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
+)
+
+func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
+	g := UrlToGallery(galleryUrl)
+	if gallery := DetailsCacheRead(g.GalleryId); gallery != nil {
+		return *gallery, nil
+	}
+
+	defer func() {
+		if err == nil {
+			// 缓存画廊详情
+			g := UrlToGallery(galleryUrl)
+			detailsCacheWrite(g.GalleryId, gallery)
+		}
+	}()
+
+	doc, err := httpGetDoc(ctx, galleryUrl)
+	if err != nil {
+		return
+	}
+
+	// cover    "#gd1 > div"
+	// title    "#gn"
+	// titleJpn "#gj"
+
+	// cat      "#gdc > div"
+	// uploader "#gdn > a:nth-child(1)"
+
+	// posted     "#gdd > table > tbody > tr:nth-child(1) > td.gdt2"
+	// parent     "#gdd > table > tbody > tr:nth-child(2) > td.gdt2"
+	//            "#gdd > table > tbody > tr:nth-child(2) > td.gdt2 > a" // galleryId
+	// visible    "#gdd > table > tbody > tr:nth-child(3) > td.gdt2"
+	// language   "#gdd > table > tbody > tr:nth-child(4) > td.gdt2"        // "Chinese &nbsp;"
+	// translated "#gdd > table > tbody > tr:nth-child(4) > td.gdt2 > span" // 译本存在 "TR" 标
+	// fileSize   "#gdd > table > tbody > tr:nth-child(5) > td.gdt2"
+	// length     "#gdd > table > tbody > tr:nth-child(6) > td.gdt2"
+	// favorited  "#gdd > table > tbody > tr:nth-child(7) > td.gdt2" // "3745 times"
+	//            "#favcount"
+
+	// ratingCount "#rating_count"
+	// rating      "#rating_label" // "Average: 4.86"
+
+	// tags         "#taglist > table > tbody"
+	// tagNamespace "#taglist > table > tbody > tr:nth-child(1) > td:nth-child(1)" // "language:"
+	// tag          "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(1) > a" // "chinese"
+	//              "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(2) > a" // "translated"
+
+	var cover string
+	doc.Find("#gd1 > div").Each(func(i int, sel *goquery.Selection) {
+		style, exists := sel.Attr("style")
+		if exists {
+			matches := coverUrlReg.FindStringSubmatch(style)
+			if len(matches) > 1 {
+				cover = matches[1]
+			}
+		}
+	})
+
+	title := doc.Find("#gn").Text()
+	titleJpn := doc.Find("#gj").Text()
+
+	cat := doc.Find("#gdc > div").Text()
+	uploader := doc.Find("#gdn > a:nth-child(1)").Text()
+
+	gdd := doc.Find("#gdd > table > tbody")
+	posted := gdd.Find("tr:nth-child(1) > td.gdt2").Text()
+	parent := gdd.Find("tr:nth-child(2) > td.gdt2 > a").Text()
+	parentId, _ := atoi(parent)
+	visible := gdd.Find("tr:nth-child(3) > td.gdt2").Text()
+	langSel := gdd.Find("tr:nth-child(4) > td.gdt2").Clone()
+	langSel.Find("span").Remove()
+	language := strings.TrimSpace(langSel.Text()) // "Chinese &nbsp;"
+	translated := gdd.Find("tr:nth-child(4) > td.gdt2 > span").Text()
+	fileSize := gdd.Find("tr:nth-child(5) > td.gdt2").Text()
+	length := gdd.Find("tr:nth-child(6) > td.gdt2").Text()
+	length = strings.TrimSuffix(length, " pages") // "65 pages"
+	lengthNum, _ := atoi(length)
+	favorited := gdd.Find("tr:nth-child(7) > td.gdt2").Text()
+	favorited = strings.TrimSuffix(favorited, " times") // "3745 times"
+	favoritedNum, _ := atoi(favorited)
+
+	ratingCount := doc.Find("#rating_count").Text()
+	ratingCountNum, _ := atoi(ratingCount)
+
+	rating := doc.Find("#rating_label").Text()
+	rating = strings.TrimPrefix(rating, "Average: ") // "Average: 4.86"
+	rating = strings.TrimSpace(rating)
+	ratingNum, err := strconv.ParseFloat(rating, 64)
+	if err != nil {
+		err = wrapErr(ErrNotANumber, rating)
+		return
+	}
+
+	var tags []Tag
+	taglist := doc.Find("#taglist > table > tbody")
+	taglist.Find("tr").Each(func(i int, s *goquery.Selection) {
+		namespace := s.Find("td:nth-child(1)").Text()
+		if namespace == "" {
+			return
+		}
+		namespace = strings.TrimSuffix(namespace, ":") // "language:"
+		s.Find("td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+			tag := s.Find("a").Text()
+			if tag != "" {
+				tags = append(tags, Tag{Namespace: namespace, Name: tag})
+			}
+		})
+	})
+
+	// body > div:nth-child(*) > p
+	// <p class="gpc">Showing 1 - 5 of 5 images</p>
+	numImages := doc.Find(".gpc").Text()
+	matches := numReg.FindStringSubmatch(numImages)
+	if len(matches) == 0 {
+		err = wrapErr(ErrRegMismatch, numImages)
+		return
+	}
+	if matches[1] == "" || matches[2] == "" {
+		err = wrapErr(ErrRegEmptyMatch, numImages)
+		return
+	}
+	end, _ := atoi(matches[1])
+	total, _ := atoi(matches[2])
+	if end == 0 || total == 0 {
+		err = wrapErr(ErrNoImage, numImages)
+		return
+	}
+	pages := 0
+	if end == total {
+		pages = 1
+	} else if end > total {
+		err = wrapErr(ErrEndGreaterThanTotal, numImages)
+		return
+	} else {
+		pages = total / end
+		if total%end != 0 {
+			pages++
+		}
+	}
+
+	pageUrls := make([]string, total)
+	errs := make(chan error, pages)
+
+	wg := sync.WaitGroup{}
+	wg.Add(pages)
+
+	limiter := newLimiter()
+	defer limiter.close()
+
+	for page := range pages {
+		select {
+		case <-ctx.Done():
+			return
+		case limiter.acquire() <- struct{}{}:
+		}
+
+		go func(page int) {
+			defer func() {
+				limiter.release()
+				wg.Done()
+			}()
+
+			var pageDoc *goquery.Document
+			if page == 0 { // 起始页不需要重新加载
+				pageDoc = doc
+			} else {
+				u, err := netUrl.Parse(galleryUrl)
+				if err != nil {
+					errs <- err
+					return
+				}
+				u.RawQuery = "p=" + itoa(page)
+				pageDoc, err = httpGetDoc(ctx, u.String())
+				if err != nil {
+					errs <- err
+					return
+				}
+			}
+			// #gdt > a:nth-child(*)
+			pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
+				index := page*end + i
+				url := s.AttrOr("href", "")
+				pageUrls[index] = url
+			})
+		}(page)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	for e := range errs {
+		if e != nil {
+			err = e
+			return
+		}
+	}
+
+	for i := range pageUrls {
+		if pageUrls[i] == "" {
+			err = wrapErr(ErrFoundEmptyPageUrl, i)
+			return
+		}
+	}
+
+	domain, gId, gToken := UrlGetGIdGToken(galleryUrl)
+	gIdNum, _ := atoi(gId)
+	return GalleryDetails{
+		Domain: domain,
+		Gallery: Gallery{
+			GalleryId:    gIdNum,
+			GalleryToken: gToken,
+		},
+		Cover:    cover,
+		Title:    title,
+		TitleJpn: titleJpn,
+
+		Cat:      cat,
+		Uploader: uploader,
+
+		Posted:     posted,
+		Parent:     parentId,
+		Visible:    visible,
+		Language:   language,
+		Translated: translated,
+		FileSize:   fileSize,
+		Length:     lengthNum,
+		Favorited:  favoritedNum,
+
+		RatingCount: ratingCountNum,
+		Rating:      ratingNum,
+
+		Tags: tags,
+
+		PageUrls: pageUrls,
+	}, nil
+}
 
 // fetchGalleryPages 遍历获取所有页链接
+//
+// Deprecated: [fetchGalleryDetails]
 func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
 	defer func() {
 		if err == nil {

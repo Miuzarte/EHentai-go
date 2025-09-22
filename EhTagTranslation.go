@@ -117,6 +117,30 @@ func (db *EhTagDatabase) Info() map[string]int {
 	return namespacesLen
 }
 
+func (db *EhTagDatabase) TranslateTags(tags []Tag) []Tag {
+	if !db.Ok() {
+		return tags
+	}
+	t := make([]Tag, len(tags))
+	for i := range tags {
+		t[i] = db.TranslateTag(tags[i])
+	}
+	return t
+}
+
+func (db *EhTagDatabase) TranslateTag(tag Tag) Tag {
+	if !db.Ok() {
+		return tag
+	}
+	if ns, ok := (*db)[tag.Namespace]; ok {
+		tag.Namespace = (*db)["rows"][tag.Namespace]
+		if name, ok := ns[tag.Name]; ok {
+			tag.Name = name
+		}
+	}
+	return tag
+}
+
 func (db *EhTagDatabase) TranslateMulti(tags []string) []string {
 	if !db.Ok() {
 		return tags

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"net/http"
 	"os"
 	"slices"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/Miuzarte/EHentai-go/internal/utils"
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/image/webp"
 )
 
 func urlGetDomain(u string) Domain {
@@ -155,7 +159,11 @@ func extractMainDomain(host string) string {
 }
 
 func sadPandaCheck(doc *goquery.Document) bool {
-	return doc.Find("head").Length() == 0 && doc.Find("body").Length() == 0
+	head := doc.Find("head")
+	body := doc.Find("body")
+	emptyHead := head.Text() == ""
+	emptyBody := body.Text() == ""
+	return emptyHead && emptyBody
 }
 
 func ipBannedCheck(doc *goquery.Document) bool {
@@ -259,4 +267,20 @@ func collectGIds(pageUrls []string) (gIds utils.Set[int]) {
 		gIds[gId] = struct{}{}
 	}
 	return gIds
+}
+
+func tryDecodeImage(data []byte) (image.Image, ImageType) {
+	img, err := webp.Decode(bytes.NewReader(data))
+	if err == nil {
+		return img, IMAGE_TYPE_WEBP
+	}
+	img, err = jpeg.Decode(bytes.NewReader(data))
+	if err == nil {
+		return img, IMAGE_TYPE_JPEG
+	}
+	img, err = png.Decode(bytes.NewReader(data))
+	if err == nil {
+		return img, IMAGE_TYPE_PNG
+	}
+	return nil, IMAGE_TYPE_UNKNOWN
 }

@@ -2,8 +2,10 @@ package EHentai
 
 import (
 	"context"
+	"errors"
 	"iter"
 	"net/http"
+	"strings"
 )
 
 var (
@@ -115,6 +117,10 @@ func SetCacheDir(dir string) {
 	cacheDir = dir
 }
 
+func EhTagDBOk() bool {
+	return ehTagDatabase.Ok()
+}
+
 // InitEhTagDB 初始化 EhTagTranslation 数据库
 func InitEhTagDB() error {
 	return ehTagDatabase.Init()
@@ -128,6 +134,42 @@ func FreeEhTagDB() {
 // UnmarshalEhTagDB 手动将 json 反序列化至 EhTagTranslation 数据库
 func UnmarshalEhTagDB(data string) error {
 	return ehTagDatabase.Unmarshal(data)
+}
+
+var ErrInvalidTag = errors.New("invalid tag")
+
+func ParseTags(tags []string) (Tags, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	t := make([]Tag, len(tags))
+	for i, tag := range tags {
+		tag, err := ParseTag(tag)
+		if err != nil {
+			return nil, err
+		}
+		t[i] = tag
+	}
+	return t, nil
+}
+
+func ParseTag(tag string) (Tag, error) {
+	s := strings.Split(tag, ":")
+	if len(s) != 2 {
+		return Tag{}, wrapErr(ErrInvalidTag, tag)
+	}
+	return Tag{
+		Namespace: s[0],
+		Name:      s[1],
+	}, nil
+}
+
+func TranslateTags(tags Tags) Tags {
+	return ehTagDatabase.TranslateTags(tags)
+}
+
+func TranslateTag(tag Tag) Tag {
+	return ehTagDatabase.TranslateTag(tag)
 }
 
 // TranslateMulti 翻译多个 tag,
@@ -171,13 +213,6 @@ func DownloadCoversIter(ctx context.Context, results coverProviders) iter.Seq2[I
 	return job.downloadIterImage()
 }
 
-// DownloadCovers 通过搜索结果下载封面
-func DownloadCovers(ctx context.Context, results coverProviders) ([]Image, error) {
-	job := newDownloader(ctx, newImageDownload(results.GetCover()))
-	job.startBackground()
-	return job.downloadImage()
-}
-
 // DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
 //
 // 不传入 pageNums 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
@@ -198,6 +233,30 @@ func DownloadPagesIter(ctx context.Context, pageUrls ...string) iter.Seq2[PageDa
 	job.firstYieldErr = err
 	job.startBackground()
 	return job.downloadIterPage()
+}
+
+// DownloadCoversTo 完全异步地通过搜索结果下载封面
+func DownloadCoversTo(ctx context.Context, results coverProviders, f func(int, Image, error)) error {
+	job := newDownloader(ctx, newImageDownload(results.GetCover()))
+	job.startBackground()
+	return job.downloadImagesTo(f)
+}
+
+// DownloadGalleryTo 完全异步地下载画廊下所有图片, 下载失败时自动尝试备链
+func DownloadPagesTo(ctx context.Context, pageUrls []string, f func(int, PageData, error)) error {
+	availableCache, err := initDownloadPages(pageUrls)
+
+	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
+	job.firstYieldErr = err
+	job.startBackground()
+	return job.downloadPagesTo(f)
+}
+
+// DownloadCovers 通过搜索结果下载封面
+func DownloadCovers(ctx context.Context, results coverProviders) ([]Image, error) {
+	job := newDownloader(ctx, newImageDownload(results.GetCover()))
+	job.startBackground()
+	return job.downloadImage()
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
@@ -228,7 +287,14 @@ func DownloadPages(ctx context.Context, pageUrls ...string) ([]PageData, error) 
 	return job.downloadPage()
 }
 
+// FetchGalleryDetails 获取画廊详细信息与所有页链接
+func FetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
+	return fetchGalleryDetails(ctx, galleryUrl)
+}
+
 // FetchGalleryPageUrls 获取画廊下所有页链接
+//
+// Deprecated: use [FetchGalleryDetails] instead
 func FetchGalleryPageUrls(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
 	return fetchGalleryPages(ctx, galleryUrl)
 }

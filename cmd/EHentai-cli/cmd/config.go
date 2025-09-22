@@ -48,7 +48,7 @@ type configStruct struct {
 	Search struct {
 		Site             EHentai.Domain   // '-e' / '-x' / '--site'
 		EhTagTranslation bool             // '-t' '--eh-tag'
-		Category         []string         //  '--cat'
+		Category         []string         // '--cat'
 		Detail           bool             // '-d' '--detail'
 		TorrentDetail    bool             // '--torrent-detail'
 		category         EHentai.Category // parsed

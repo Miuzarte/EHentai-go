@@ -1,10 +1,15 @@
 package EHentai
 
 import (
+	"bytes"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"slices"
 	"strings"
 
 	"github.com/Miuzarte/EHentai-go/internal/utils"
+	"golang.org/x/image/webp"
 )
 
 type ImageType int
@@ -76,6 +81,87 @@ const (
 	EXHENTAI_DOMAIN Domain = "exhentai.org"
 )
 
+type Tag struct {
+	Namespace string
+	Name      string
+}
+
+func (t Tag) String() string {
+	return t.Namespace + ":" + t.Name
+}
+
+type Tags []Tag
+
+func (t Tags) Namespaces() (namespaces []string) {
+	namespaces = make([]string, len(t))
+	for i := range t {
+		namespaces[i] = t[i].Namespace
+	}
+	s := make(utils.Set[string])
+	return s.Clean(namespaces)
+}
+
+func (t Tags) Names() (names []string) {
+	names = make([]string, len(t))
+	for i := range t {
+		names[i] = t[i].Name
+	}
+	return names
+}
+
+func (t Tags) Set() (ts []TagSet) {
+	setPos := make(map[string]int)
+	for _, tag := range t {
+		i, ok := setPos[tag.Namespace]
+		if !ok {
+			i = len(ts)
+			setPos[tag.Namespace] = i
+			ts = append(ts, TagSet{Namespace: tag.Namespace})
+		}
+		ts[i].Tags = append(ts[i].Tags, tag.Name)
+	}
+	return ts
+}
+
+type TagSet struct {
+	Namespace string
+	Tags      []string
+}
+
+// GalleryDetails 来自画廊详情页
+type GalleryDetails struct {
+	Domain Domain
+	Gallery
+
+	Cover    string // url
+	Title    string // 英文标题
+	TitleJpn string // 日文标题
+
+	Cat      string // 分类
+	Uploader string // 上传者
+
+	Posted     string // "2006-01-02 15:04"
+	Parent     int    // galleryId, 0 for "None"
+	Visible    string // "Yes" / "No (Replaced)"
+	Language   string // "Chinese" / "Japanese"
+	Translated string // "TR" / ""
+	FileSize   string // "449.9 MiB"
+	Length     int    // 65
+	Favorited  int    // 3745
+
+	RatingCount int     // 271
+	Rating      float64 // 4.86
+
+	// Tags []string // namespace:tag
+	Tags []Tag
+
+	PageUrls []string
+}
+
+func (gd *GalleryDetails) GetCover() (urls []string) {
+	return []string{gd.Cover}
+}
+
 type Torrent struct {
 	Hash  string `json:"hash"`
 	Added string `json:"added"`
@@ -84,6 +170,7 @@ type Torrent struct {
 	FSize string `json:"fsize"`
 }
 
+// GalleryMetadata 来自官方 api
 type GalleryMetadata struct {
 	GId          int       `json:"gid"`
 	Token        string    `json:"token"`
@@ -181,17 +268,23 @@ type coverProviders interface {
 	GetCover() (urls []string)
 }
 
+// FSearchResult 来自搜索结果页
 type FSearchResult struct {
 	Domain Domain
-	Gid    int
-	Token  string
-	Cat    string
-	Cover  string
-	Rating string
-	Url    string
-	Tags   []string
-	Title  string // 根据 cookie 中的 sk, 结果可能为英文或日文
-	Pages  string
+	Gallery
+
+	Cat string // 分类
+
+	Cover  string  // url
+	Posted string  // "2006-01-02 15:04"
+	Rating float64 // 精确到 0.5
+
+	Url   string   // 画廊 URL
+	Title string   // 根据 cookie 中的 sk, 结果可能为英文或日文
+	Tags  []string // namespace:tag
+
+	Uploader string // 上传者
+	Pages    int    // 64
 }
 
 type FSearchResults []FSearchResult
@@ -205,12 +298,31 @@ func (fsr FSearchResults) GetCover() (urls []string) {
 }
 
 type Image struct {
-	Data []byte
-	Type ImageType
+	Data    []byte
+	Type    ImageType
+	TypeRaw string
 }
 
 func (i *Image) String() string {
 	return "image/" + i.Type.String() + " (" + itoa(len(i.Data)) + " bytes)"
+}
+
+func (i *Image) Decode() (image.Image, error) {
+	switch i.Type {
+	case IMAGE_TYPE_WEBP:
+		return webp.Decode(bytes.NewReader(i.Data))
+	case IMAGE_TYPE_JPEG:
+		return jpeg.Decode(bytes.NewReader(i.Data))
+	case IMAGE_TYPE_PNG:
+		return png.Decode(bytes.NewReader(i.Data))
+	default:
+		img, typ := tryDecodeImage(i.Data)
+		if typ != IMAGE_TYPE_UNKNOWN {
+			i.Type = typ
+			return img, nil
+		}
+	}
+	return nil, wrapErr(ErrUnknownImageType, i.TypeRaw)
 }
 
 // PageData carrys page info and image data
