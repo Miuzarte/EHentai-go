@@ -104,6 +104,8 @@ func httpGet(ctx context.Context, url string) (resp *http.Response, err error) {
 }
 
 func httpGetDoc(ctx context.Context, url string) (doc *goquery.Document, err error) {
+	again := false
+AGAIN:
 	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, err
@@ -115,11 +117,15 @@ func httpGetDoc(ctx context.Context, url string) (doc *goquery.Document, err err
 		return nil, err
 	}
 
-	if sadPandaCheck(doc) {
-		return nil, wrapErr(ErrSadPanda, nil)
-	}
 	if ipBannedCheck(doc) {
 		return nil, wrapErr(ErrIpBanned, nil)
+	}
+	if sadPandaCheck(doc) {
+		if !again {
+			again = true
+			goto AGAIN // 可能 igneous 过期并重新下发, cookie 更新后重试
+		}
+		return nil, wrapErr(ErrSadPanda, nil)
 	}
 	return doc, nil
 }

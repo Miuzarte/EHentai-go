@@ -19,10 +19,7 @@ var (
 
 // SetCookie 设置 cookie, 访问 exhentai 时必需
 func SetCookie(memberId, passHash, igneous, sk string) {
-	cookie.ipbMemberId = memberId
-	cookie.ipbPassHash = passHash
-	cookie.igneous = igneous
-	cookie.sk = sk
+	cookie.set(memberId, passHash, igneous, sk)
 }
 
 // SetCookieFromString 从字符串解析 cookie
@@ -30,6 +27,20 @@ func SetCookie(memberId, passHash, igneous, sk string) {
 // 返回值 n 为解析的 cookie 数量
 func SetCookieFromString(s string) (n int, err error) {
 	return cookie.fromString(s)
+}
+
+// RegisterIgneousUpdate 注册 igneous 更新时的回调通知
+//
+// 回调函数将在独立协程中执行
+func RegisterIgneousUpdate(f func(igneous string)) {
+	igneousUpdateNotifier = f
+}
+
+// SetAcceptIgneousMystery 设置是否接受 exhentai 下发的 igneous=mystery
+//
+// 默认为 false
+func SetAcceptIgneousMystery(b bool) {
+	acceptMystery = b
 }
 
 // SetDomainFronting 设置是否使用域名前置

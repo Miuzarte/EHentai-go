@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	netUrl "net/url"
-	"strings"
 	"sync"
 	"time"
 )
@@ -46,6 +45,12 @@ var interceptorRoundTrip = &InterceptorRoundTrip{
 	Interceptors: defaultInterceptors,
 }
 
+// igneousUpdateNotifier igneous 更新时回调通知
+var (
+	igneousUpdateNotifier func(igneous string)
+	acceptMystery = false
+)
+
 var cookie = &cookieManager{}
 
 var httpClient = &http.Client{
@@ -58,36 +63,57 @@ type cookieManager struct {
 	ipbPassHash string
 	igneous     string
 	sk          string // 不给的话搜索结果只有英文
+	cookies     []*http.Cookie
 }
 
-func (c *cookieManager) SetCookies(_ *netUrl.URL, _ []*http.Cookie) {
-	// only for implementation of [http.CookieJar] currently
-	// TODO?: implement account login
+func (c *cookieManager) rebuildCookies() {
+	if c.ipbMemberId == "" || c.ipbPassHash == "" {
+		c.cookies = nil
+		return
+	}
+
+	c.cookies = make([]*http.Cookie, 0, 4)
+	c.cookies = append(c.cookies, &http.Cookie{Name: "ipb_member_id", Value: c.ipbMemberId})
+	c.cookies = append(c.cookies, &http.Cookie{Name: "ipb_pass_hash", Value: c.ipbPassHash})
+	if c.igneous != "" {
+		c.cookies = append(c.cookies, &http.Cookie{Name: "igneous", Value: c.igneous})
+	}
+	if c.sk != "" {
+		c.cookies = append(c.cookies, &http.Cookie{Name: "sk", Value: c.sk})
+	}
 }
 
-func (c *cookieManager) Cookies(u *netUrl.URL) []*http.Cookie {
+func (c *cookieManager) SetCookies(u *netUrl.URL, cookies []*http.Cookie) {
+	for _, cookie := range cookies {
+		if cookie.Name == "igneous" {
+			if cookie.Value != "mystery" || acceptMystery {
+				c.igneous = cookie.Value
+				c.rebuildCookies()
+			}
+			if igneousUpdateNotifier != nil {
+				go igneousUpdateNotifier(cookie.Value)
+			}
+		}
+	}
+}
+
+func (c *cookieManager) Cookies(u *netUrl.URL) (cookies []*http.Cookie) {
 	domain := extractMainDomain(u.Host)
 	if domain != EHENTAI_DOMAIN && domain != EXHENTAI_DOMAIN {
 		return nil
 	}
-	return c.toCookies()
+	if c.ipbMemberId == "" || c.ipbPassHash == "" {
+		return nil
+	}
+	return c.cookies
 }
 
-func (c *cookieManager) toCookies() (cookies []*http.Cookie) {
-	cookies = make([]*http.Cookie, 0, 4)
-	if c.ipbMemberId != "" {
-		cookies = append(cookies, &http.Cookie{Name: "ipb_member_id", Value: c.ipbMemberId})
-	}
-	if c.ipbPassHash != "" {
-		cookies = append(cookies, &http.Cookie{Name: "ipb_pass_hash", Value: c.ipbPassHash})
-	}
-	if c.igneous != "" {
-		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: c.igneous})
-	}
-	if c.sk != "" {
-		cookies = append(cookies, &http.Cookie{Name: "sk", Value: c.sk})
-	}
-	return cookies
+func (c *cookieManager) set(memberId, passHash, igneous, sk string) {
+	c.ipbMemberId = memberId
+	c.ipbPassHash = passHash
+	c.igneous = igneous
+	c.sk = sk
+	c.rebuildCookies()
 }
 
 func (c *cookieManager) fromString(cookieStr string) (n int, err error) {
@@ -95,6 +121,7 @@ func (c *cookieManager) fromString(cookieStr string) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
+	defer c.rebuildCookies()
 	for _, cookie := range cookies {
 		switch cookie.Name {
 		case "ipb_member_id":
@@ -114,19 +141,18 @@ func (c *cookieManager) fromString(cookieStr string) (n int, err error) {
 	return
 }
 
-func (c *cookieManager) String() string {
-	cookies := c.toCookies()
-	if len(cookies) == 0 {
+func (c *cookieManager) String() (s string) {
+	if c.ipbMemberId == "" || c.ipbPassHash == "" {
 		return ""
 	}
-	sb := strings.Builder{}
-	for i, cookie := range cookies {
-		if i != 0 {
-			sb.WriteString("; ")
-		}
-		sb.WriteString(cookie.String())
+	s = "ipb_member_id=" + c.ipbMemberId + "; ipb_pass_hash=" + c.ipbPassHash
+	if c.igneous != "" {
+		s += "; igneous=" + c.igneous
 	}
-	return sb.String()
+	if c.sk != "" {
+		s += "; sk=" + c.sk
+	}
+	return s
 }
 
 // InterceptorRoundTrip implements [http.RoundTripper],
