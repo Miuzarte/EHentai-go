@@ -186,7 +186,31 @@ for pageData, err := range EHentai.DownloadPagesIter(ctx, pageUrls...) {
     _ = err
 }
 
-// 下载全部一起返回:
+// 通过回调函数完全异步地下载
+// 以一个GUI程序为例
+func (g *Gallery) InitReader() {
+	g.Ctx, g.Cancel = context.WithCancel(context.Background())
+	g.Images = make([]widgets.Image, g.Gallery.Length)
+	go EHentai.DownloadPagesTo(g.Ctx, g.Gallery.PageUrls, func(i int, pd EHentai.PageData, err error) {
+		if err != nil {
+			g.Images[i].Err = err
+			log.Warnf("page %d error: %v", i, err)
+			return
+		}
+		g.Images[i].Image, g.Images[i].Err = pd.Image.Decode()
+		window.Invalidate()
+	})
+    // ......
+}
+
+// 以及下载封面
+results, err := EHentai.EHSearch(ctx, "keyword")
+_ = err
+EHentai.DownloadCoverTo(ctx, results, func(pd EHentai.PageData, err error) {
+    // ......
+})
+
+// 下载全部一起返回
 pageDatas, err := EHentai.DownloadGallery(ctx, gUrl)
 _ = pageDatas
 _ = err
@@ -194,18 +218,19 @@ _, _ = EHentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
 _, _ = EHentai.DownloadPages(ctx, pageUrls...)
 ```
 
-### 获取画廊下所有页链接
+### 获取画廊详细信息与所有页链接
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
 gUrl := "https://e-hentai.org/g/3138775/30b0285f9b"
-pageUrls, err := EHentai.FetchGalleryPageUrls(ctx, gUrl)
+galleryDetails, err := EHentai.FetchGalleryDetails(ctx, gUrl)
 if err != nil {
     panic(err)
 }
-for _, pageUrl := range pageUrls {
+fmt.Println(galleryDetails.Title, galleryDetails.TitleJpn, galleryDetails.Cat)
+for _, pageUrl := range galleryDetails.PageUrls {
     fmt.Println(pageUrl)
 }
 ```
