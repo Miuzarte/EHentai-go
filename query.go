@@ -327,15 +327,19 @@ func queryFSearch(ctx context.Context, url, keyword string, categories ...Catego
 	return
 }
 
+// Showing 1 - 20 of 2,000 images
 // Showing 1 - 20 of 65 images
 // Showing 1 - 5 of 5 images
 // Showing 1 - 1 of 1 image (?
 var (
-	numReg      = regexp.MustCompile(`Showing 1 - (\d+) of (\d+) images?`)
+	numReg      = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
 	coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
 )
 
 func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	g := UrlToGallery(galleryUrl)
 	if gallery := DetailsCacheRead(g.GalleryId); gallery != nil {
 		return *gallery, nil
@@ -454,6 +458,7 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 		err = wrapErr(ErrRegEmptyMatch, numImages)
 		return
 	}
+	matches[2] = strings.ReplaceAll(matches[2], ",", "")
 	end, _ := atoi(matches[1])
 	total, _ := atoi(matches[2])
 	if end == 0 || total == 0 {
@@ -599,6 +604,7 @@ func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []strin
 	if matches[1] == "" || matches[2] == "" {
 		return nil, wrapErr(ErrRegEmptyMatch, numImages)
 	}
+	matches[2] = strings.ReplaceAll(matches[2], ",", "")
 	end, _ := atoi(matches[1])
 	total, _ := atoi(matches[2])
 	if end == 0 || total == 0 {
