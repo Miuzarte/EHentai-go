@@ -275,18 +275,24 @@ func collectGIds(pageUrls []string) (gIds utils.Set[int]) {
 	return gIds
 }
 
-func tryDecodeImage(data []byte) (image.Image, ImageType) {
-	img, err := webp.Decode(bytes.NewReader(data))
-	if err == nil {
-		return img, IMAGE_TYPE_WEBP
-	}
-	img, err = jpeg.Decode(bytes.NewReader(data))
-	if err == nil {
-		return img, IMAGE_TYPE_JPEG
-	}
-	img, err = png.Decode(bytes.NewReader(data))
-	if err == nil {
-		return img, IMAGE_TYPE_PNG
+func tryDecodeImage(data []byte) (img image.Image, _ ImageType) {
+	var err error
+	switch http.DetectContentType(data) {
+	case "image/webp":
+		img, err = webp.Decode(bytes.NewReader(data))
+		if err == nil {
+			return img, IMAGE_TYPE_WEBP
+		}
+	case "image/jpeg":
+		img, err = jpeg.Decode(bytes.NewReader(data))
+		if err == nil {
+			return img, IMAGE_TYPE_JPEG
+		}
+	case "image/png":
+		img, err = png.Decode(bytes.NewReader(data))
+		if err == nil {
+			return img, IMAGE_TYPE_PNG
+		}
 	}
 	return nil, IMAGE_TYPE_UNKNOWN
 }

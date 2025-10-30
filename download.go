@@ -32,41 +32,39 @@ type download struct {
 	err   chan error
 }
 
-func (dl *download) start(ctx context.Context) {
+func (d *download) start(ctx context.Context) {
 	var err error
-	defer func() { dl.err <- err }()
+	defer func() { d.err <- err }()
 
 	switch {
-	case dl.page != nil:
+	case d.page != nil:
 		var page PageData
-		if autoCacheEnabled && dl.cache != nil {
+		if autoCacheEnabled && d.cache != nil {
 			// 读缓存
-			page, err = dl.cache.ReadOne(dl.page.PageNum)
+			page, err = d.cache.ReadOne(d.page.PageNum)
 			if err == nil {
-				dl.page = &page
+				d.page = &page
 				return
 			}
 		}
 
-		page, err = downloadPage(ctx, dl.url)
+		page, err = downloadPage(ctx, d.url)
 		if err == nil {
-			dl.page = &page
+			d.page = &page
 			// 写缓存
-			if autoCacheEnabled && dl.cache != nil {
-				writingWg.Add(1)
-				go func() {
-					defer writingWg.Done()
-					dl.cache.Write(page)
-				}()
+			if autoCacheEnabled && d.cache != nil {
+				writingWg.Go(func() {
+					d.cache.Write(page)
+				})
 			}
 		}
 		return
 
-	case dl.img != nil:
+	case d.img != nil:
 		var img Image
-		img, err = downloadImage(ctx, dl.url)
+		img, err = downloadImage(ctx, d.url)
 		if err == nil {
-			dl.img = &img
+			d.img = &img
 		}
 		return
 
@@ -124,8 +122,8 @@ func newDownloader(ctx context.Context, dls []*download) *downloader {
 	}
 }
 
-func (j *downloader) startBackground() {
-	if j.firstYieldErr != nil {
+func (dl *downloader) startBackground() {
+	if dl.firstYieldErr != nil {
 		return
 	}
 
@@ -133,37 +131,31 @@ func (j *downloader) startBackground() {
 		limiter := newLimiter()
 		defer limiter.close()
 
-		for _, item := range j.items {
+		for _, item := range dl.items {
 			select {
-			case <-j.ctx.Done():
+			case <-dl.ctx.Done():
 				return
 			case limiter.acquire() <- struct{}{}:
 			}
 
-			// no more resumable
-			// if item.done() {
-			// 	close(item.err)
-			// 	continue
-			// }
-
 			go func() {
 				defer limiter.release()
-				item.start(j.ctx)
+				item.start(dl.ctx)
 			}()
 		}
 	}()
 }
 
-func (j *downloader) downloadIterPage() iter.Seq2[PageData, error] {
+func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 	return func(yield func(PageData, error) bool) {
-		defer j.cancel()
+		defer dl.cancel()
 
-		if j.firstYieldErr != nil {
-			yield(PageData{}, j.firstYieldErr)
+		if dl.firstYieldErr != nil {
+			yield(PageData{}, dl.firstYieldErr)
 			return
 		}
 
-		for _, item := range j.items {
+		for _, item := range dl.items {
 			if !yield(*item.page, <-item.err) {
 				return
 			}
@@ -171,16 +163,16 @@ func (j *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 	}
 }
 
-func (j *downloader) downloadIterImage() iter.Seq2[Image, error] {
+func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
 	return func(yield func(Image, error) bool) {
-		defer j.cancel()
+		defer dl.cancel()
 
-		if j.firstYieldErr != nil {
-			yield(Image{}, j.firstYieldErr)
+		if dl.firstYieldErr != nil {
+			yield(Image{}, dl.firstYieldErr)
 			return
 		}
 
-		for _, item := range j.items {
+		for _, item := range dl.items {
 			err, ok := <-item.err
 			if !ok {
 				continue
@@ -195,11 +187,11 @@ func (j *downloader) downloadIterImage() iter.Seq2[Image, error] {
 
 var ErrWrongSliceSize = errors.New("wrong slice size")
 
-func (j *downloader) downloadPagesTo(f func(int, PageData, error)) error {
-	if j.firstYieldErr != nil {
-		return j.firstYieldErr
+func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
+	if dl.firstYieldErr != nil {
+		return dl.firstYieldErr
 	}
-	for i, item := range j.items {
+	for i, item := range dl.items {
 		go func() {
 			err := <-item.err
 			if err != nil {
@@ -212,11 +204,11 @@ func (j *downloader) downloadPagesTo(f func(int, PageData, error)) error {
 	return nil
 }
 
-func (j *downloader) downloadImagesTo(f func(int, Image, error)) error {
-	if j.firstYieldErr != nil {
-		return j.firstYieldErr
+func (dl *downloader) downloadImagesTo(f func(int, Image, error)) error {
+	if dl.firstYieldErr != nil {
+		return dl.firstYieldErr
 	}
-	for i, item := range j.items {
+	for i, item := range dl.items {
 		go func() {
 			err := <-item.err
 			if err != nil {
@@ -229,9 +221,9 @@ func (j *downloader) downloadImagesTo(f func(int, Image, error)) error {
 	return nil
 }
 
-func (j *downloader) downloadPage() ([]PageData, error) {
-	results := make([]PageData, 0, len(j.items))
-	for img, err := range j.downloadIterPage() {
+func (dl *downloader) downloadPage() ([]PageData, error) {
+	results := make([]PageData, 0, len(dl.items))
+	for img, err := range dl.downloadIterPage() {
 		if err != nil {
 			return nil, err
 		}
@@ -240,9 +232,9 @@ func (j *downloader) downloadPage() ([]PageData, error) {
 	return results, nil
 }
 
-func (j *downloader) downloadImage() ([]Image, error) {
-	results := make([]Image, 0, len(j.items))
-	for img, err := range j.downloadIterImage() {
+func (dl *downloader) downloadImage() ([]Image, error) {
+	results := make([]Image, 0, len(dl.items))
+	for img, err := range dl.downloadIterImage() {
 		if err != nil {
 			return nil, err
 		}
@@ -323,13 +315,13 @@ func downloadImage(ctx context.Context, imgUrl string) (img Image, err error) {
 	}
 	defer resp.Body.Close()
 
-	// image/webp, image/jpeg
+	// image/webp, image/jpeg, image/png
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "image") {
 		return Image{}, wrapErr(ErrInvalidContentType, fmt.Sprintf("%s, %s", contentType, imgUrl))
 	}
 	contentTypeSplits := strings.Split(contentType, "/")
-	if len(contentTypeSplits) != 2 {
+	if len(contentTypeSplits) != 2 || len(contentTypeSplits[1]) == 0 {
 		return Image{}, wrapErr(ErrInvalidContentType, fmt.Sprintf("%s, %s", contentType, imgUrl))
 	}
 

@@ -50,6 +50,19 @@ func ParseImageType(s string) ImageType {
 	}
 }
 
+func ParseImageMimeType(mimeType string) ImageType {
+	switch strings.ToLower(mimeType) {
+	case "image/webp":
+		return IMAGE_TYPE_WEBP
+	case "image/jpeg":
+		return IMAGE_TYPE_JPEG
+	case "image/png":
+		return IMAGE_TYPE_PNG
+	default:
+		return IMAGE_TYPE_UNKNOWN
+	}
+}
+
 type CacheState int
 
 const (
