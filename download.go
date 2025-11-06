@@ -107,10 +107,9 @@ func newImageDownload(urls []string) (dls []*download) {
 }
 
 type downloader struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	items         []*download
-	firstYieldErr error // 包装外部错误到迭代器中
+	ctx    context.Context
+	cancel context.CancelFunc
+	items  []*download
 }
 
 func newDownloader(ctx context.Context, dls []*download) *downloader {
@@ -123,10 +122,6 @@ func newDownloader(ctx context.Context, dls []*download) *downloader {
 }
 
 func (dl *downloader) startBackground() {
-	if dl.firstYieldErr != nil {
-		return
-	}
-
 	go func() {
 		limiter := newLimiter()
 		defer limiter.close()
@@ -147,14 +142,9 @@ func (dl *downloader) startBackground() {
 }
 
 func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
+	dl.startBackground()
 	return func(yield func(PageData, error) bool) {
 		defer dl.cancel()
-
-		if dl.firstYieldErr != nil {
-			yield(PageData{}, dl.firstYieldErr)
-			return
-		}
-
 		for _, item := range dl.items {
 			if !yield(*item.page, <-item.err) {
 				return
@@ -164,14 +154,9 @@ func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 }
 
 func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
+	dl.startBackground()
 	return func(yield func(Image, error) bool) {
 		defer dl.cancel()
-
-		if dl.firstYieldErr != nil {
-			yield(Image{}, dl.firstYieldErr)
-			return
-		}
-
 		for _, item := range dl.items {
 			err, ok := <-item.err
 			if !ok {
@@ -188,9 +173,7 @@ func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
 var ErrWrongSliceSize = errors.New("wrong slice size")
 
 func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
-	if dl.firstYieldErr != nil {
-		return dl.firstYieldErr
-	}
+	dl.startBackground()
 	for i, item := range dl.items {
 		go func() {
 			err := <-item.err
@@ -205,9 +188,7 @@ func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
 }
 
 func (dl *downloader) downloadImagesTo(f func(int, Image, error)) error {
-	if dl.firstYieldErr != nil {
-		return dl.firstYieldErr
-	}
+	dl.startBackground()
 	for i, item := range dl.items {
 		go func() {
 			err := <-item.err

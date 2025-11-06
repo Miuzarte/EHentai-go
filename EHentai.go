@@ -219,9 +219,7 @@ func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category
 
 // DownloadCoversIter 以迭代器模式通过搜索结果下载封面
 func DownloadCoversIter(ctx context.Context, results coverProviders) iter.Seq2[Image, error] {
-	job := newDownloader(ctx, newImageDownload(results.GetCover()))
-	job.startBackground()
-	return job.downloadIterImage()
+	return newDownloader(ctx, newImageDownload(results.GetCover())).downloadIterImage()
 }
 
 // DownlaodGalleryIter 以迭代器模式下载画廊下所有图片, 下载失败时自动尝试备链
@@ -229,45 +227,42 @@ func DownloadCoversIter(ctx context.Context, results coverProviders) iter.Seq2[I
 // 不传入 pageNums 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
 func DownloadGalleryIter(ctx context.Context, galleryUrl string, pageNums ...int) iter.Seq2[PageData, error] {
 	pageUrls, availableCache, err := initDownloadGallery(ctx, galleryUrl, pageNums...)
-
-	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
-	job.firstYieldErr = err
-	job.startBackground()
-	return job.downloadIterPage()
+	if err != nil {
+		return func(yield func(PageData, error) bool) {
+			yield(PageData{}, err)
+		}
+	}
+	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadIterPage()
 }
 
 // DownloadPagesIter 以迭代器模式下载画廊某页的图片, 下载失败时自动尝试备链
 func DownloadPagesIter(ctx context.Context, pageUrls ...string) iter.Seq2[PageData, error] {
 	availableCache, err := initDownloadPages(pageUrls)
-
-	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
-	job.firstYieldErr = err
-	job.startBackground()
-	return job.downloadIterPage()
+	if err != nil {
+		return func(yield func(PageData, error) bool) {
+			yield(PageData{}, err)
+		}
+	}
+	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadIterPage()
 }
 
 // DownloadCoversTo 完全异步地通过搜索结果下载封面
 func DownloadCoversTo(ctx context.Context, results coverProviders, f func(int, Image, error)) error {
-	job := newDownloader(ctx, newImageDownload(results.GetCover()))
-	job.startBackground()
-	return job.downloadImagesTo(f)
+	return newDownloader(ctx, newImageDownload(results.GetCover())).downloadImagesTo(f)
 }
 
 // DownloadGalleryTo 完全异步地下载画廊下所有图片, 下载失败时自动尝试备链
 func DownloadPagesTo(ctx context.Context, pageUrls []string, f func(int, PageData, error)) error {
 	availableCache, err := initDownloadPages(pageUrls)
-
-	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
-	job.firstYieldErr = err
-	job.startBackground()
-	return job.downloadPagesTo(f)
+	if err != nil {
+		return err
+	}
+	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPagesTo(f)
 }
 
 // DownloadCovers 通过搜索结果下载封面
 func DownloadCovers(ctx context.Context, results coverProviders) ([]Image, error) {
-	job := newDownloader(ctx, newImageDownload(results.GetCover()))
-	job.startBackground()
-	return job.downloadImage()
+	return newDownloader(ctx, newImageDownload(results.GetCover())).downloadImage()
 }
 
 // DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
@@ -278,11 +273,7 @@ func DownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) ([
 	if err != nil {
 		return nil, err
 	}
-
-	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
-	job.firstYieldErr = err
-	job.startBackground()
-	return job.downloadPage()
+	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPage()
 }
 
 // DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
@@ -291,11 +282,7 @@ func DownloadPages(ctx context.Context, pageUrls ...string) ([]PageData, error) 
 	if err != nil {
 		return nil, err
 	}
-
-	job := newDownloader(ctx, newPageDownload(pageUrls, availableCache))
-	job.firstYieldErr = err
-	job.startBackground()
-	return job.downloadPage()
+	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPage()
 }
 
 // FetchGalleryDetails 获取画廊详细信息与所有页链接
