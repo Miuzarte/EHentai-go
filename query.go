@@ -150,9 +150,10 @@ func searchDetail(ctx context.Context, url, keyword string, categories ...Catego
 }
 
 // Found about 192,819 results.
+// Found 1,000+ results.
 // Found 2 results.
 // Found 1 result.
-var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+) results?`)
+var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
 
 // 5   background-position:0px -1px;opacity:1
 // 4.5 background-position:0px -21px;opacity:1

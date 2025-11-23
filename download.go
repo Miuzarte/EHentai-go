@@ -64,7 +64,7 @@ func (d *download) start(ctx context.Context) {
 		var img Image
 		img, err = downloadImage(ctx, d.url)
 		if err == nil {
-			d.img = &img
+			*d.img = img
 		}
 		return
 
@@ -170,7 +170,7 @@ func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
 	}
 }
 
-var ErrWrongSliceSize = errors.New("wrong slice size")
+// var ErrWrongSliceSize = errors.New("wrong slice size") // ?
 
 func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
 	dl.startBackground()

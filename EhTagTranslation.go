@@ -68,7 +68,6 @@ func (db *EhTagDatabase) doUnmarshal(data string) (int, error) {
 
 	// 解析每个 namespace
 	wg := sync.WaitGroup{}
-	wg.Add(len(datasArr) - 1)
 	for i, data := range datasArr {
 		if i == 0 {
 			continue
@@ -77,12 +76,11 @@ func (db *EhTagDatabase) doUnmarshal(data string) (int, error) {
 		namespaceData := data.Get("data").Map()
 		m := make(map[string]string, len(namespaceData))
 		(*db)[namespace] = m
-		go func(namespaceData map[string]gjson.Result, m map[string]string) {
-			defer wg.Done()
+		wg.Go(func() {
 			for tag, value := range namespaceData {
 				m[tag] = value.Get("name").String()
 			}
-		}(namespaceData, m)
+		})
 	}
 	wg.Wait()
 
