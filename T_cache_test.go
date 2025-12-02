@@ -10,7 +10,7 @@ func TestCacheMetadata(t *testing.T) {
 	metadataCacheEnabled = true
 	var err error
 	var resp *GalleryMetadataResponse
-	var pageUrls []string
+	var gallery GalleryDetails
 	resp, err = PostGalleryMetadata(t.Context(), GIdList{TEST_GALLERY_GID, TEST_GALLERY_GTOKEN})
 	if err != nil {
 		t.Fatal(err)
@@ -18,12 +18,12 @@ func TestCacheMetadata(t *testing.T) {
 	if len(resp.GMetadata) == 0 {
 		t.Fatal("len(resp.GMetadata) == 0")
 	}
-	pageUrls, err = fetchGalleryPages(t.Context(), TEST_GALLERY_URL)
+	gallery, err = fetchGalleryDetails(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pageUrls) == 0 {
-		t.Fatal("len(pageUrls) == 0")
+	if len(gallery.PageUrls) == 0 {
+		t.Fatal("len(gallery.PageUrls) == 0")
 	}
 
 	mc := MetaCacheRead(TEST_GALLERY_GID)

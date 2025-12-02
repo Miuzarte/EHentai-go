@@ -142,7 +142,7 @@ type (
 func newRamCache[K comparable, T any](timeout time.Duration) ramCache[K, T] {
 	return ramCache[K, T]{
 		timeout: timeout,
-		m:       make(map[K]genericCacheData[T]),
+		m:       map[K]genericCacheData[T]{},
 	}
 }
 
@@ -178,5 +178,5 @@ func (rc *ramCache[K, T]) clean() {
 func (rc *ramCache[K, T]) reset() {
 	rc.Lock()
 	defer rc.Unlock()
-	rc.m = make(map[K]genericCacheData[T])
+	rc.m = map[K]genericCacheData[T]{}
 }

@@ -41,7 +41,7 @@ func (sss SliceSyntaxes) ToIndexesNoRepeat(sliceLen int) (indexes []int, err err
 	if len(sss) == 0 {
 		return nil, fmt.Errorf("empty slice syntax")
 	}
-	set := make(Set[int])
+	set := Set[int]{}
 	for _, ss := range sss {
 		var indexs []int
 		indexs, err = ss.ToIndexes(sliceLen)

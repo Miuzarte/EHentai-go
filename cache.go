@@ -61,7 +61,7 @@ func GetCache(gId int) *cacheGallery {
 }
 
 // CreateCacheFromUrl 从画廊 url 覆盖创建缓存
-func CreateCacheFromUrl(gUrl string) (cache *cacheGallery, err error) {
+func CreateCacheFromUrl(ctx context.Context, gUrl string) (cache *cacheGallery, err error) {
 	domain := urlGetDomain(gUrl)
 	gu := UrlToGallery(gUrl)
 
@@ -76,7 +76,7 @@ func CreateCacheFromUrl(gUrl string) (cache *cacheGallery, err error) {
 	}
 
 	if gallery == nil {
-		resp, err := PostGalleryMetadata(context.Background(), gu)
+		resp, err := PostGalleryMetadata(ctx, gu)
 		if err != nil {
 			return nil, err
 		}
@@ -89,10 +89,11 @@ func CreateCacheFromUrl(gUrl string) (cache *cacheGallery, err error) {
 		gallery = &resp.GMetadata[0]
 	}
 	if len(pageUrls) == 0 {
-		pageUrls, err = fetchGalleryPages(context.Background(), gUrl)
+		gallery, err := fetchGalleryDetails(ctx, gUrl)
 		if err != nil {
 			return nil, err
 		}
+		pageUrls = gallery.PageUrls
 	}
 
 	return CreateCache(domain, gallery, pageUrls)
@@ -199,7 +200,7 @@ func DeleteCache(gId int) (err error) {
 // cacheGallery 画廊缓存实例
 type cacheGallery struct {
 	meta   *CacheGalleryMetadata
-	metaMu sync.Mutex // 保护 [CacheGalleryMetadata].Files.Pages
+	metaMu sync.Mutex // 保护 [CacheGalleryMetadata.Files].Pages
 
 	updaterRunning   atomic.Bool
 	updaterIdleTimer *time.Timer
@@ -210,7 +211,7 @@ type cacheGallery struct {
 
 func (cg *cacheGallery) updateMetadata() error {
 	// 去重 排序 计数
-	st := make(utils.Set[CachePageInfo])
+	st := utils.Set[CachePageInfo]{}
 	cg.meta.Files.Pages = st.Clean(cg.meta.Files.Pages)
 	slices.SortFunc(
 		cg.meta.Files.Pages,
@@ -237,7 +238,7 @@ func (cg *cacheGallery) updateMetadata() error {
 		if err != nil {
 			return err
 		}
-		pageExts := make(utils.Set[string])
+		pageExts := utils.Set[string]{}
 		for _, pageInfo := range cg.meta.Files.Pages {
 			pageExts.Add(ImageType(pageInfo.Type).String())
 		}

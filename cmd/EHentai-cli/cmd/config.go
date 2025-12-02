@@ -47,6 +47,7 @@ type configStruct struct {
 
 	Search struct {
 		Site             EHentai.Domain   // '-e' / '-x' / '--site'
+		Url              EHentai.Url      // [TODO] replace .Site
 		EhTagTranslation bool             // '-t' '--eh-tag'
 		Category         []string         // '--cat'
 		Detail           bool             // '-d' '--detail'

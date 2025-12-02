@@ -30,7 +30,7 @@ func getSearch(ctx context.Context) (total int, results FSearchResults, err erro
 	if searchTotal != 0 && len(searchResults) != 0 {
 		return searchTotal, searchResults, nil
 	}
-	total, results, err = EHSearch(ctx, TEST_FSEARCH_KEYWORD)
+	total, results, err = FSearch(ctx, EHENTAI_URL, TEST_FSEARCH_KEYWORD)
 	if err != nil {
 		return
 	}
@@ -44,7 +44,7 @@ func getSearchDetail(ctx context.Context) (total int, results []GalleryMetadata,
 	if searchDetailTotal != 0 && len(searchDetailResults) != 0 {
 		return searchDetailTotal, searchDetailResults, nil
 	}
-	total, results, err = EHSearchDetail(ctx, TEST_FSEARCH_KEYWORD)
+	total, results, err = SearchDetail(ctx, EHENTAI_URL, TEST_FSEARCH_KEYWORD)
 	if err != nil {
 		return
 	}
@@ -54,7 +54,7 @@ func getSearchDetail(ctx context.Context) (total int, results []GalleryMetadata,
 	return
 }
 
-func TestEHApiPostGalleryMetadata(t *testing.T) {
+func TestEhApiPostGalleryMetadata(t *testing.T) {
 	resp, err := PostGalleryMetadata(t.Context(), GIdList{3138775, "30b0285f9b"})
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestEHApiPostGalleryMetadata(t *testing.T) {
 	t.Logf("%+v", *resp)
 }
 
-func TestEHApiPostGalleryToken(t *testing.T) {
+func TestEhApiPostGalleryToken(t *testing.T) {
 	resp, err := PostGalleryToken(t.Context(), PageList{"0b2127ea05", 3138775, 8})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestEHApiPostGalleryToken(t *testing.T) {
 	t.Logf("%+v", *resp)
 }
 
-func TestEHSearch(t *testing.T) {
+func TestEhSearch(t *testing.T) {
 	total, results, err := getSearch(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestEHSearch(t *testing.T) {
 	}
 }
 
-func TestEHSearchDetail(t *testing.T) {
+func TestEhSearchDetail(t *testing.T) {
 	total, results, err := getSearchDetail(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestEHSearchDetail(t *testing.T) {
 	}
 }
 
-func TestEHDownloadCovers(t *testing.T) {
+func TestEhDownloadCovers(t *testing.T) {
 	_, results, err := getSearch(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestEHDownloadCovers(t *testing.T) {
 	}
 }
 
-func TestEHDownloadGallery(t *testing.T) {
+func TestEhDownloadGallery(t *testing.T) {
 	n := 0
 	for page, err := range DownloadGalleryIter(t.Context(), TEST_GALLERY_URL, TEST_GALLERY_PAGE_0, TEST_GALLERY_PAGE_1) {
 		n++
@@ -135,7 +135,7 @@ func TestEHDownloadGallery(t *testing.T) {
 	}
 }
 
-func TestEHDownloadPages(t *testing.T) {
+func TestEhDownloadPages(t *testing.T) {
 	n := 0
 	for page, err := range DownloadPagesIter(t.Context(), TEST_PAGE_URL_0, TEST_PAGE_URL_1) {
 		n++
@@ -152,7 +152,7 @@ func TestEHDownloadPages(t *testing.T) {
 	}
 }
 
-func TestEHFetchGalleryPageUrls(t *testing.T) {
+func TestEhFetchGalleryPageUrls(t *testing.T) {
 	pageUrls, err := FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)

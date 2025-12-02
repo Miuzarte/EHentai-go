@@ -29,11 +29,11 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 // sk 为空时, 搜索结果标题只有英文
 EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 // 也可以直接设置字符串
-// EHentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
+EHentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
 
 // 注册 igneous 更新回调
 EHentai.RegisterIgneousUpdate(func(igneous string) {
-    fmt.Printf("igneous updated: %s\n", igneous)
+    log.Printf("igneous updated: %s\n", igneous)
 })
 // 允许 igneous 被下发覆盖为 "mystery", 默认 false
 EHentai.SetAcceptIgneousMystery(false)
@@ -45,31 +45,15 @@ EHentai.SetAcceptIgneousMystery(false)
 tStart := time.Now()
 // 在 AMD Ryzen 5600x(6c12t) 上, 解析数据大概耗时 4ms
 // 要更新的话再调用一次
-err := EHentai.InitEhTagDB()
+err := EHentai.InitEhTagDb()
 if err != nil {
-    panic(err)
+    log.Fatalln(err)
 }
-fmt.Printf("InitEhTagDB took %s\n", time.Since(tStart))
+// 总时间包括从 GitHub 下载数据
+log.Printf("InitEhTagDb took %s\n", time.Since(tStart))
 
 // 释放数据库
-EHentai.FreeEhTagDB()
-```
-
-### 设置域名前置
-
-抄的[jiangtian616/JHenTai](https://github.com/jiangtian616/JHenTai)
-
-```go
-// 默认为 false
-EHentai.SetDomainFronting(false)
-
-// 自定义域名前置所使用的 ip 获取器
-// type IpProvider interface {
-//     Supports(host string) bool
-//     NextIp(host string) string
-//     AddUnavailableIp(host, ip string)
-// }
-EHentai.SetCustomIpProvider(IpProvider(nil))
+EHentai.FreeEhTagDb()
 ```
 
 ### 设置下载并发数
@@ -83,7 +67,7 @@ EHentai.SetThreads(4)
 
 ```go
 // 默认为 true
-// 配合域名前置食用
+// 配合域名前置设置为 false 食用
 EHentai.SetUseEnvPorxy(true)
 ```
 
@@ -98,6 +82,29 @@ EHentai.SetRetryDepth(2)
 
 ```html
 <a href="#" id="loadfail" onclick="return nl('45453-483314')">Reload broken image</a>
+```
+
+### 设置域名前置
+
+抄的[jiangtian616/JHenTai](https://github.com/jiangtian616/JHenTai)
+
+```go
+// 默认为 false
+EHentai.SetDomainFronting(false)
+```
+
+### 自定义域名前置所使用的 ip 获取器
+
+IpProvider 实现示例: [internal/usage/network.go:MyIpProvider](internal/usage/network.go#L56)
+
+```go
+// type IpProvider interface {
+//     Supports(host string) bool
+//     NextIp(host string) string
+//     AddUnavailableIp(host, ip string)
+// }
+myIpProvider := EHentai.IpProvider(&MyIpProvider{})
+EHentai.SetCustomIpProvider(myIpProvider)
 ```
 
 ### 设置缓存
@@ -123,30 +130,40 @@ EHentai.SetAutoCacheEnabled(false)
 EHentai.SetCacheDir("path/to/cache")
 ```
 
+### 自行管理缓存
+
+见 [internal/usage/cache.go:UsageManageCache](internal/usage/cache.go#L33)
+
 ### 搜索 E(x)Hentai
 
 ```go
+const keyword = "耳で恋した同僚〜オナサポ音声オタク女が同僚の声に反応してイキまくり〜"
+
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
 // 没做翻页, results 可能比 total 要少
-total, results, err := EHentai.EHSearch(ctx, "keyword")
-// total, results, err := EHentai.ExHSearch(ctx, "keyword")
+total, results, err := EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword)
+// total, results, err := EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword)
 if err != nil {
-    panic(err)
+    log.Fatalln(err)
 }
-fmt.Printf("Total results: %d\n", total)
+log.Printf("Total results: %d\n", total)
 for _, result := range results {
-    fmt.Println(result.Title)
+    log.Println(result.Title)
 }
+
+// 两种传法
+cate1 := EHentai.CATEGORY_DOUJINSHI | EHentai.CATEGORY_MANGA
+cate2 := []EHentai.Category{EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA}
 
 // 也可以分类搜索
-EHentai.EHSearch(ctx, "keyword", EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA)
-// EHentai.EHSearch(ctx, "keyword", EHentai.CATEGORY_DOUJINSHI|EHentai.CATEGORY_MANGA)
+EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword, cate1)
+EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
 
 // 搜索同时通过官方 api 获取详细信息
-EHentai.EHSearchDetail(ctx, "keyword")
-// ExHSearchDetail(ctx, "keyword")
+EHentai.SearchDetail(ctx, EHentai.EHENTAI_URL, keyword, cate1)
+EHentai.SearchDetail(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
 ```
 
 ### 下载画廊 / 下载页
@@ -167,13 +184,13 @@ pageUrls := []string{
 // 下载整个画廊
 for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
     if err != nil {
-        fmt.Println(err)
+        log.Println(err)
         // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出
         // 如果是下载过程出错, 可以由外部决定是否取消下载
         break
         // continue
     }
-    fmt.Println(pageData.String())
+    log.Println(pageData.String())
 }
 // 下载画廊中的指定页
 for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
@@ -186,36 +203,33 @@ for pageData, err := range EHentai.DownloadPagesIter(ctx, pageUrls...) {
     _ = err
 }
 
-// 通过回调函数完全异步地下载
-// 以一个GUI程序为例
-func (g *Gallery) InitReader() {
-	g.Ctx, g.Cancel = context.WithCancel(context.Background())
-	g.Images = make([]widgets.Image, g.Gallery.Length)
-	go EHentai.DownloadPagesTo(g.Ctx, g.Gallery.PageUrls, func(i int, pd EHentai.PageData, err error) {
-		if err != nil {
-			g.Images[i].Err = err
-			log.Warnf("page %d error: %v", i, err)
-			return
-		}
-		g.Images[i].Image, g.Images[i].Err = pd.Image.Decode()
-		window.Invalidate()
-	})
-    // ......
-}
-
-// 以及下载封面
-results, err := EHentai.EHSearch(ctx, "keyword")
-_ = err
-EHentai.DownloadCoverTo(ctx, results, func(pd EHentai.PageData, err error) {
-    // ......
-})
-
-// 下载全部一起返回
+// 下载全部一起返回:
 pageDatas, err := EHentai.DownloadGallery(ctx, gUrl)
 _ = pageDatas
 _ = err
 _, _ = EHentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
 _, _ = EHentai.DownloadPages(ctx, pageUrls...)
+```
+
+### 通过回调函数完全异步地下载
+
+```go
+// 以一个GUI程序为例
+reader := myReader{}
+reader.Ctx, reader.Cancel = context.WithCancel(context.Background())
+reader.Images = make([]widgetsImage, reader.Gallery.Length)
+go EHentai.DownloadPagesTo(reader.Ctx, reader.Gallery.PageUrls,
+    func(i int, pd EHentai.PageData, err error) {
+        if err != nil {
+            reader.Images[i].Err = err
+            log.Printf("page %d error: %v", i, err)
+            return
+        }
+        reader.Images[i].Image, reader.Images[i].Err = pd.Image.Decode()
+        reader.Window.Invalidate() // 触发 GUI 重新渲染
+    },
+)
+// ...
 ```
 
 ### 获取画廊详细信息与所有页链接
@@ -224,17 +238,13 @@ _, _ = EHentai.DownloadPages(ctx, pageUrls...)
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
-gUrl := "https://e-hentai.org/g/3138775/30b0285f9b"
+const gUrl = "https://e-hentai.org/g/3138775/30b0285f9b"
 galleryDetails, err := EHentai.FetchGalleryDetails(ctx, gUrl)
 if err != nil {
     panic(err)
 }
-fmt.Println(galleryDetails.Title, galleryDetails.TitleJpn, galleryDetails.Cat)
+log.Println(galleryDetails.Title, galleryDetails.TitleJpn, galleryDetails.Cat)
 for _, pageUrl := range galleryDetails.PageUrls {
-    fmt.Println(pageUrl)
+    log.Println(pageUrl)
 }
 ```
-
-### 自行管理缓存
-
-见 [T_usage_test.go:UsageManageCache](T_usage_test.go#L192)

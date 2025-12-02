@@ -15,8 +15,7 @@ var (
 )
 
 func initEnv() (_ struct{}) {
-	var err error
-	XDir, err = os.Executable()
+	XPath, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
@@ -24,8 +23,8 @@ func initEnv() (_ struct{}) {
 	if err != nil {
 		panic(err)
 	}
-	NoBuild = strings.Contains(XDir, "go-build")
-	Testing = strings.Contains(XDir, ".test")
-	XDir = filepath.Dir(XDir)
+	NoBuild = strings.Contains(XPath, "go-build")
+	Testing = strings.Contains(XPath, ".test")
+	XDir = filepath.Dir(XPath)
 	return
 }

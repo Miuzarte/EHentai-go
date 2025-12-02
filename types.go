@@ -90,8 +90,15 @@ func (cs CacheState) String() string {
 type Domain = string
 
 const (
-	EHENTAI_DOMAIN  Domain = "e-hentai.org"
-	EXHENTAI_DOMAIN Domain = "exhentai.org"
+	EHENTAI_DOMAIN  Domain = `e-hentai.org`
+	EXHENTAI_DOMAIN Domain = `exhentai.org`
+)
+
+type Url = string
+
+const (
+	EHENTAI_URL  Url = `https://` + EHENTAI_DOMAIN
+	EXHENTAI_URL Url = `https://` + EXHENTAI_DOMAIN
 )
 
 type Tag struct {
@@ -110,7 +117,7 @@ func (t Tags) Namespaces() (namespaces []string) {
 	for i := range t {
 		namespaces[i] = t[i].Namespace
 	}
-	s := make(utils.Set[string])
+	s := utils.Set[string]{}
 	return s.Clean(namespaces)
 }
 
@@ -123,7 +130,7 @@ func (t Tags) Names() (names []string) {
 }
 
 func (t Tags) Set() (ts []TagSet) {
-	setPos := make(map[string]int)
+	setPos := map[string]int{}
 	for _, tag := range t {
 		i, ok := setPos[tag.Namespace]
 		if !ok {
@@ -359,7 +366,7 @@ type CachePageInfos []CachePageInfo
 
 // Exts 返回存在的图片扩展名
 func (cpi *CachePageInfos) Exts() []ImageType {
-	set := make(utils.Set[ImageType])
+	set := utils.Set[ImageType]{}
 	for _, pageInfo := range *cpi {
 		set.Add(ImageType(pageInfo.Type))
 	}

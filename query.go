@@ -12,11 +12,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const (
-	EHENTAI_URL  = `https://e-hentai.org`
-	EXHENTAI_URL = `https://exhentai.org`
-)
-
 type Category uint
 
 const ( // 实际 query 时要用 1023^CATEGORY_XXX
@@ -133,10 +128,10 @@ var (
 	ErrNotANumber          = errors.New("not a number")
 )
 
-func searchDetail(ctx context.Context, url, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
+func searchDetail(ctx context.Context, url Url, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
 	total, results, err := queryFSearch(ctx, url, keyword, categories...)
 	if err != nil {
-		return
+		return 0, nil, err
 	}
 	list := make([]Gallery, len(results))
 	for i := range results {
@@ -194,12 +189,15 @@ func parseStars(stars string) (rating float64) {
 }
 
 // total != len(results) 即不止一页
-func queryFSearch(ctx context.Context, url, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
+func queryFSearch(ctx context.Context, url Url, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
 	u, err := netUrl.Parse(url)
 	if err != nil {
 		return 0, nil, err
 	}
-	querys := make(netUrl.Values)
+	if u.Scheme == "" {
+		u.Scheme = "https"
+	}
+	querys := netUrl.Values{}
 	if len(categories) != 0 {
 		var cate Category
 		for _, c := range categories {
@@ -580,7 +578,7 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 
 // fetchGalleryPages 遍历获取所有页链接
 //
-// Deprecated: [fetchGalleryDetails]
+// Deprecated: [fetchGalleryDetails] [GalleryDetails.PageUrls]
 func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
 	defer func() {
 		if err == nil {

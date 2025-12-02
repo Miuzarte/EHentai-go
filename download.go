@@ -234,36 +234,37 @@ func (dl *downloader) downloadImage() ([]Image, error) {
 func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, availCache map[int]*cacheGallery, err error) {
 	gId := UrlToGallery(galleryUrl).GalleryId
 
-	cg := GetCache(gId)
-	dc := DetailsCacheRead(gId)
-	if cg != nil {
-		pageUrls = pageUrlsToSlice(cg.meta.PageUrls)
+	cachedGallery := GetCache(gId) // 本地缓存
+	cachedDetails := DetailsCacheRead(gId) // 元数据缓存
+	if cachedGallery != nil {
+		pageUrls = pageUrlsToSlice(cachedGallery.meta.PageUrls)
 		availCache = make(map[int]*cacheGallery, 1)
-		availCache[gId] = cg
+		availCache[gId] = cachedGallery
 
-	} else if dc != nil && len(dc.PageUrls) != 0 {
-		pageUrls = dc.PageUrls
+	} else if cachedDetails != nil && len(cachedDetails.PageUrls) != 0 {
+		pageUrls = cachedDetails.PageUrls
 	} else {
-		pageUrls, err = fetchGalleryPages(ctx, galleryUrl)
+		gallery, err := fetchGalleryDetails(ctx, galleryUrl)
 		if err != nil {
 			return nil, nil, err
 		}
+		pageUrls = gallery.PageUrls
 	}
 
-	set := make(utils.Set[int])
+	set := utils.Set[int]{}
 	pageNums = set.Clean(pageNums)                        // 去重
 	pageNums = cleanOutOfRange(len(pageUrls), pageNums)   // 越界检查
 	pageUrls = rearange(pageUrls, sliceAdd(pageNums, -1)) // 按页码重排 url
 
-	if autoCacheEnabled && cg == nil {
+	if autoCacheEnabled && cachedGallery == nil {
 		// 创建缓存
-		cg, err = CreateCacheFromUrl(galleryUrl)
+		cachedGallery, err = CreateCacheFromUrl(ctx, galleryUrl)
 		if err != nil {
 			return nil, nil, err
 		}
-		if cg != nil {
+		if cachedGallery != nil {
 			availCache = make(map[int]*cacheGallery, 1)
-			availCache[gId] = cg
+			availCache[gId] = cachedGallery
 		}
 	}
 

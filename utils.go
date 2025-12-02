@@ -233,7 +233,7 @@ func rearange[T any](s []T, indexes []int) (rearranged []T) {
 
 // dirLookupExt 查找目录下的文件，返回指定扩展名的文件列表
 func dirLookupExt(dirEnts []os.DirEntry, exts ...string) []os.DirEntry {
-	extsMap := make(utils.Set[string])
+	extsMap := utils.Set[string]{}
 	for _, ext := range exts {
 		extsMap[strings.ToLower(ext)] = struct{}{}
 	}

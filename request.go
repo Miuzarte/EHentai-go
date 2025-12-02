@@ -13,9 +13,9 @@ import (
 var domainFrontingInterceptor = &DomainFrontingInterceptor{
 	Enabled: false,
 	IpProvider: &EHRoundRobinIpProvider{
-		host2Ips:       make(map[string][]string),
-		ipsIndex:       make(map[string]int),
-		unavailableIps: make(map[string]time.Time),
+		host2Ips:       map[string][]string{},
+		ipsIndex:       map[string]int{},
+		unavailableIps: map[string]time.Time{},
 	},
 }
 
@@ -48,7 +48,7 @@ var interceptorRoundTrip = &InterceptorRoundTrip{
 // igneousUpdateNotifier igneous 更新时回调通知
 var (
 	igneousUpdateNotifier func(igneous string)
-	acceptMystery = false
+	acceptMystery         = false
 )
 
 var cookie = &cookieManager{}
@@ -325,7 +325,7 @@ func (p *EHRoundRobinIpProvider) host2IpsCopyFrom(m map[string][]string) {
 		}
 		p.ipsIndex[host] = 0
 	}
-	p.unavailableIps = make(map[string]time.Time)
+	p.unavailableIps = map[string]time.Time{}
 }
 
 func (p *EHRoundRobinIpProvider) Supports(host string) bool {

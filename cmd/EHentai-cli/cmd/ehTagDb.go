@@ -16,13 +16,13 @@ import (
 )
 
 // 搜索完再初始化数据库
-func initEhTagDB() (err error) {
+func initEhTagDb() (err error) {
 	if !config.Search.EhTagTranslation {
 		return nil
 	}
 
 	// 尝试获取缓存
-	data, err := readEhTagDBCache()
+	data, _ := readEhTagDbCache()
 	if len(data) == 0 {
 		searchLog.Debug("downloading EhTagTranslation database from GitHub")
 		var resp *http.Response
@@ -37,7 +37,7 @@ func initEhTagDB() (err error) {
 		}
 
 		// 写缓存
-		if err := writeEhTagDBCache(string(data)); err != nil {
+		if err := writeEhTagDbCache(string(data)); err != nil {
 			searchLog.Error("failed to write EhTagTranslation database cache: ", err)
 		}
 	} else {
@@ -45,7 +45,7 @@ func initEhTagDB() (err error) {
 	}
 
 	tn := time.Now()
-	err = EHentai.UnmarshalEhTagDB(unsafe.String(unsafe.SliceData(data), len(data)))
+	err = EHentai.UnmarshalEhTagDb(unsafe.String(unsafe.SliceData(data), len(data)))
 	if err != nil {
 		return
 	}
@@ -54,13 +54,13 @@ func initEhTagDB() (err error) {
 	return nil
 }
 
-func writeEhTagDBCache(data string) (err error) {
+func writeEhTagDbCache(data string) (err error) {
 	f := filepath.Join(env.XDir, "ehTagDB_"+strconv.FormatInt(time.Now().Unix(), 10)+".json")
 	return os.WriteFile(f, []byte(data), 0o644)
 }
 
-func readEhTagDBCache() (data []byte, err error) {
-	filename, t, err := findEhTagDBCache()
+func readEhTagDbCache() (data []byte, err error) {
+	filename, t, err := findEhTagDbCache()
 	if err != nil {
 		return
 	}
@@ -73,9 +73,12 @@ func readEhTagDBCache() (data []byte, err error) {
 	return os.ReadFile(filename)
 }
 
-func findEhTagDBCache() (path string, t time.Time, err error) {
+func findEhTagDbCache() (path string, t time.Time, err error) {
 	files, err := filepath.Glob(filepath.Join(env.XDir, "ehTagDB_*.json"))
 	if err != nil {
+		if err == filepath.ErrBadPattern {
+			panic(err)
+		}
 		return
 	}
 	if len(files) == 0 {
@@ -83,11 +86,10 @@ func findEhTagDBCache() (path string, t time.Time, err error) {
 		return
 	}
 
-	// 最后一个是最新的
 	slices.Sort(files)
+	slices.Reverse(files) // 新到旧
 
-	for i := len(files) - 1; i >= 0; i-- {
-		file := files[i]
+	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 		// ehTagDB_1699999999
 		i := strings.Index(name, "_")

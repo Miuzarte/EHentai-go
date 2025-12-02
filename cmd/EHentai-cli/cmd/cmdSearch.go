@@ -128,10 +128,15 @@ var searchCmd = &cobra.Command{
 		return initConfig(cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
+		if config.Search.Url == "" {
+			searchLog.Panicf("config.Search.Url is empty: %+v", config)
+		}
+
 		keyword := strings.Join(args, " ")
 
 		cat := config.Search.category
-		searchLog.Debug("searching site: ", config.Search.Site)
+		// searchLog.Debug("searching site: ", config.Search.Site)
+		searchLog.Debug("searching url: ", config.Search.Url)
 		searchLog.Debug("searching keyword: ", keyword)
 		searchLog.Debug("searching categories: ", cat)
 
@@ -213,18 +218,13 @@ func searchFlagChanged(searchFlags *pflag.FlagSet) {
 	}
 }
 
-func search(ctx context.Context, site EHentai.Domain, keyword string, categories ...EHentai.Category) (total int, err error) {
+func search(ctx context.Context, url EHentai.Url, keyword string, categories ...EHentai.Category) (total int, err error) {
 	var results EHentai.FSearchResults
-	switch site {
-	case EHentai.EHENTAI_DOMAIN:
-		total, results, err = EHentai.EHSearch(ctx, keyword, categories...)
-	case EHentai.EXHENTAI_DOMAIN:
-		total, results, err = EHentai.ExHSearch(ctx, keyword, categories...)
-	}
+	total, results, err = EHentai.FSearch(ctx, url, keyword, categories...)
 	if err != nil {
 		return 0, err
 	}
-	if err := initEhTagDB(); err != nil {
+	if err := initEhTagDb(); err != nil {
 		searchLog.Error("failed to init EhTagTranslation database: ", err)
 	}
 
@@ -247,18 +247,13 @@ func search(ctx context.Context, site EHentai.Domain, keyword string, categories
 	return
 }
 
-func searchDetail(ctx context.Context, site EHentai.Domain, keyword string, categories ...EHentai.Category) (total int, err error) {
+func searchDetail(ctx context.Context, url EHentai.Url, keyword string, categories ...EHentai.Category) (total int, err error) {
 	var galleries EHentai.GalleryMetadatas
-	switch site {
-	case EHentai.EHENTAI_DOMAIN:
-		total, galleries, err = EHentai.EHSearchDetail(ctx, keyword, categories...)
-	case EHentai.EXHENTAI_DOMAIN:
-		total, galleries, err = EHentai.ExHSearchDetail(ctx, keyword, categories...)
-	}
+	total, galleries, err = EHentai.SearchDetail(ctx, url, keyword, categories...)
 	if err != nil {
 		return 0, err
 	}
-	if err := initEhTagDB(); err != nil {
+	if err := initEhTagDb(); err != nil {
 		searchLog.Error("failed to init EhTagTranslation database: ", err)
 	}
 
@@ -289,7 +284,8 @@ func searchDetail(ctx context.Context, site EHentai.Domain, keyword string, cate
 		if err := tmpl.ExecuteTemplate(os.Stdout, "gallery", gallery); err != nil {
 			searchLog.Fatalf("failed to execute gallery template: %v", err)
 		}
-		url := fmt.Sprintf("https://%s/g/%d/%s/", site, gallery.GId, gallery.Token)
+		// url := fmt.Sprintf("https://%s/g/%d/%s/", site, gallery.GId, gallery.Token)
+		url := fmt.Sprintf("%s/g/%d/%s/", url, gallery.GId, gallery.Token)
 		// 列出所有种子
 		if config.Search.TorrentDetail {
 			if err := tmpl.ExecuteTemplate(os.Stdout, "torrent", gallery.Torrents); err != nil {

@@ -63,10 +63,7 @@ func SetInterceptors(interceptors ...Interceptor) {
 
 // SetThreads 设置下载并发数
 func SetThreads(n int) {
-	if n <= 0 {
-		n = 1
-	}
-	threads = n
+	threads = max(1, n)
 }
 
 // SetUseEnvProxy 设置是否使用系统环境变量中的代理
@@ -128,22 +125,24 @@ func SetCacheDir(dir string) {
 	cacheDir = dir
 }
 
-func EhTagDBOk() bool {
+func EhTagDbOk() bool {
 	return ehTagDatabase.Ok()
 }
 
-// InitEhTagDB 初始化 EhTagTranslation 数据库
-func InitEhTagDB() error {
+// InitEhTagDb 初始化 EhTagTranslation 数据库
+func InitEhTagDb() error {
 	return ehTagDatabase.Init()
 }
 
-// FreeEhTagDB 释放 EhTagTranslation 数据库
-func FreeEhTagDB() {
+// FreeEhTagDb 释放 EhTagTranslation 数据库
+func FreeEhTagDb() {
 	ehTagDatabase.Free()
 }
 
-// UnmarshalEhTagDB 手动将 json 反序列化至 EhTagTranslation 数据库
-func UnmarshalEhTagDB(data string) error {
+// UnmarshalEhTagDb 使用外部的 json 数据反序列化至 EhTagTranslation 数据库
+//
+// 主要用于 cli 在外部缓存文件
+func UnmarshalEhTagDb(data string) error {
 	return ehTagDatabase.Unmarshal(data)
 }
 
@@ -197,24 +196,14 @@ func Translate(tag string) string {
 	return ehTagDatabase.Translate(tag)
 }
 
-// EHSearch 搜索 EHentai, results 只有第一页结果
-func EHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
-	return queryFSearch(ctx, EHENTAI_URL, keyword, categories...)
+// FSearch 搜索并返回基本信息, results 只有第一页的结果
+func FSearch(ctx context.Context, url Url, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
+	return queryFSearch(ctx, url, keyword, categories...)
 }
 
-// ExHSearch 搜索 ExHentai, results 只有第一页结果
-func ExHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
-	return queryFSearch(ctx, EXHENTAI_URL, keyword, categories...)
-}
-
-// EHSearchDetail 搜索 EHentai 并返回详细信息, galleries 只有第一页结果
-func EHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
-	return searchDetail(ctx, EHENTAI_URL, keyword, categories...)
-}
-
-// ExHSearchDetail 搜索 ExHentai 并返回详细信息, galleries 只有第一页结果
-func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
-	return searchDetail(ctx, EXHENTAI_URL, keyword, categories...)
+// SearchDetail 搜索并返回详细信息, galleries 只有第一页的结果
+func SearchDetail(ctx context.Context, url Url, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
+	return searchDetail(ctx, url, keyword, categories...)
 }
 
 // DownloadCoversIter 以迭代器模式通过搜索结果下载封面
@@ -290,9 +279,45 @@ func FetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 	return fetchGalleryDetails(ctx, galleryUrl)
 }
 
+// EHSearch 搜索 EHentai, results 只有第一页结果
+//
+// Deprecated: simply use [FSearch] instead
+//
+//	EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword, categories...)
+func EHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
+	return queryFSearch(ctx, EHENTAI_URL, keyword, categories...)
+}
+
+// ExHSearch 搜索 ExHentai, results 只有第一页结果
+//
+// Deprecated: simply use [FSearch] instead
+//
+//	EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword, categories...)
+func ExHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
+	return queryFSearch(ctx, EXHENTAI_URL, keyword, categories...)
+}
+
+// EHSearchDetail 搜索 EHentai 并返回详细信息, galleries 只有第一页结果
+//
+// Deprecated: simply use [SearchDetail] instead
+//
+//	EHentai.SearchDetail(ctx, EHentai.EHENTAI_URL, keyword, categories...)
+func EHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
+	return searchDetail(ctx, EHENTAI_URL, keyword, categories...)
+}
+
+// ExHSearchDetail 搜索 ExHentai 并返回详细信息, galleries 只有第一页结果
+//
+// Deprecated: simply use [SearchDetail] instead
+//
+//	EHentai.SearchDetail(ctx, EHentai.EXHENTAI_URL, keyword, categories...)
+func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
+	return searchDetail(ctx, EXHENTAI_URL, keyword, categories...)
+}
+
 // FetchGalleryPageUrls 获取画廊下所有页链接
 //
-// Deprecated: use [FetchGalleryDetails] instead
+// Deprecated: use [FetchGalleryDetails] [GalleryDetails.PageUrls] instead
 func FetchGalleryPageUrls(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
 	return fetchGalleryPages(ctx, galleryUrl)
 }

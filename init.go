@@ -23,7 +23,7 @@ var eFs embed.FS
 
 // 初始化默认 ip 列表
 func init() {
-	host2Ips := make(map[string][]string)
+	host2Ips := map[string][]string{}
 	f, err := eFs.Open("embed/eh_host2ips.json")
 	if err != nil {
 		panic(err)

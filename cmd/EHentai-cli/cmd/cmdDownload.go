@@ -227,10 +227,11 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 
 	// 获取画廊页链接 同时解析 [utils.SliceSyntaxes]
 	for _, gId := range dl.GIds {
-		pageUrls, err := EHentai.FetchGalleryPageUrls(ctx, dl.GalleryUrls[gId])
+		gallery, err := EHentai.FetchGalleryDetails(ctx, dl.GalleryUrls[gId])
 		if err != nil {
 			return nil, err
 		}
+		pageUrls := gallery.PageUrls
 
 		var indexes []int
 		if len(sss) != 0 {
@@ -256,7 +257,7 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 
 func pagesDownload(ctx context.Context, pageUrls []string) (dl *ehentaiDownload, err error) {
 	// 从 pageUrls 中整理出画廊
-	gPageUrls := make(map[int][]string)
+	gPageUrls := map[int][]string{}
 	for i := range pageUrls {
 		g := EHentai.UrlToPage(pageUrls[i])
 		gPageUrls[g.GalleryId] = append(gPageUrls[g.GalleryId], pageUrls[i])
@@ -321,7 +322,7 @@ func (dl *ehentaiDownload) download() (err error) {
 
 		// 手动为画廊创建缓存
 		if EHentai.GetCache(dl.Gallerys[gId].GalleryId) == nil {
-			_, err = EHentai.CreateCacheFromUrl(dl.GalleryUrls[gId])
+			_, err = EHentai.CreateCacheFromUrl(dl.ctx, dl.GalleryUrls[gId])
 			if err != nil {
 				dlLog.Error("failed to create: ", err)
 				return ErrHandled
