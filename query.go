@@ -346,9 +346,10 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 
 	defer func() {
 		if err == nil {
-			// 缓存画廊详情
+			// 缓存画廊详情与页链接
 			g := UrlToGallery(galleryUrl)
 			detailsCacheWrite(g.GalleryId, gallery)
+			metaCacheWrite(g.GalleryId, nil, gallery.PageUrls)
 		}
 	}()
 

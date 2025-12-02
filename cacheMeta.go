@@ -13,8 +13,8 @@ var (
 	cacheCleanTimer *time.Ticker
 	cleanerOnce     sync.Once
 
-	gDetailsCache = newRamCache[int, GalleryDetails](cacheTimeout) // 画廊详情缓存
-	gMetaCache    = newRamCache[int, metaCache](cacheTimeout)      // 画廊元数据缓存
+	gDetailsCache = newRamCache[int, GalleryDetails](cacheTimeout) // 画廊详情缓存 (来自网页)
+	gMetaCache    = newRamCache[int, metaCache](cacheTimeout)      // 画廊元数据缓存 (来自 api)
 )
 
 func startupCleaner() {

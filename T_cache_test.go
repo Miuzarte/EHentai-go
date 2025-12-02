@@ -25,6 +25,11 @@ func TestCacheMetadata(t *testing.T) {
 		t.Fatal("len(gallery.PageUrls) == 0")
 	}
 
+	dc := DetailsCacheRead(TEST_GALLERY_GID)
+	if dc == nil {
+		t.Fatal("nil details cache")
+	}
+
 	mc := MetaCacheRead(TEST_GALLERY_GID)
 	if mc == nil {
 		t.Fatal("nil meta cache")
