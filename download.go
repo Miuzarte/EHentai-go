@@ -141,9 +141,24 @@ func (dl *downloader) startBackground() {
 	}()
 }
 
+func (dl *downloader) closeAllCache() {
+	set := utils.Set[*cacheGallery]{}
+	for _, item := range dl.items {
+		if item.cache != nil {
+			set.Add(item.cache)
+		}
+	}
+	for cache := range set {
+		// 下载完成后立即更新元数据
+		cache.updateMetadata()
+	}
+}
+
 func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 	dl.startBackground()
 	return func(yield func(PageData, error) bool) {
+		defer dl.closeAllCache()
+		defer writingWg.Wait()
 		defer dl.cancel()
 		for _, item := range dl.items {
 			if !yield(*item.page, <-item.err) {
@@ -156,6 +171,8 @@ func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
 	dl.startBackground()
 	return func(yield func(Image, error) bool) {
+		defer dl.closeAllCache()
+		defer writingWg.Wait()
 		defer dl.cancel()
 		for _, item := range dl.items {
 			err, ok := <-item.err
@@ -234,7 +251,7 @@ func (dl *downloader) downloadImage() ([]Image, error) {
 func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) (pageUrls []string, availCache map[int]*cacheGallery, err error) {
 	gId := UrlToGallery(galleryUrl).GalleryId
 
-	cachedGallery := GetCache(gId) // 本地缓存
+	cachedGallery := GetCache(gId)         // 本地缓存
 	cachedDetails := DetailsCacheRead(gId) // 元数据缓存
 	if cachedGallery != nil {
 		pageUrls = pageUrlsToSlice(cachedGallery.meta.PageUrls)

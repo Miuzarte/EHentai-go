@@ -210,6 +210,9 @@ type cacheGallery struct {
 }
 
 func (cg *cacheGallery) updateMetadata() error {
+	writingWg.Add(1)
+	defer writingWg.Done()
+
 	// 去重 排序 计数
 	st := utils.Set[CachePageInfo]{}
 	cg.meta.Files.Pages = st.Clean(cg.meta.Files.Pages)

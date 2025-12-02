@@ -2,7 +2,6 @@ package EHentai
 
 import (
 	"testing"
-	"time"
 )
 
 func TestCacheMetadata(t *testing.T) {
@@ -59,8 +58,6 @@ func TestCacheLocalGallery(t *testing.T) {
 		t.Log(page.String())
 	}
 
-	// 缓存的写入是异步的, 等待元数据更新
-	<-time.After(time.Second)
 	cache = GetCache(TEST_GALLERY_GID)
 	if cache == nil {
 		t.Fatal("nil cache")
@@ -82,7 +79,6 @@ func TestCacheLocalGallery(t *testing.T) {
 		t.Log(page.String())
 	}
 
-	<-time.After(time.Second)
 	cache = GetCache(TEST_GALLERY_GID)
 	if cache == nil {
 		t.Fatal("nil cache")
