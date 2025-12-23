@@ -43,13 +43,6 @@ func UsageDownload() {
 		_ = pageData
 		_ = err
 	}
-
-	// 下载全部一起返回:
-	pageDatas, err := ehentai.DownloadGallery(ctx, gUrl)
-	_ = pageDatas
-	_ = err
-	_, _ = ehentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
-	_, _ = ehentai.DownloadPages(ctx, pageUrls...)
 }
 
 // 通过回调函数完全异步地下载

@@ -175,22 +175,18 @@ func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
 		defer writingWg.Wait()
 		defer dl.cancel()
 		for _, item := range dl.items {
-			err, ok := <-item.err
-			if !ok {
-				continue
-			}
-
-			if !yield(*item.img, err) {
+			if !yield(*item.img, <-item.err) {
 				return
 			}
 		}
 	}
 }
 
-// var ErrWrongSliceSize = errors.New("wrong slice size") // ?
-
 func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
 	dl.startBackground()
+	defer dl.closeAllCache()
+	defer writingWg.Wait()
+	defer dl.cancel()
 	for i, item := range dl.items {
 		go func() {
 			err := <-item.err
@@ -206,6 +202,9 @@ func (dl *downloader) downloadPagesTo(f func(int, PageData, error)) error {
 
 func (dl *downloader) downloadImagesTo(f func(int, Image, error)) error {
 	dl.startBackground()
+	defer dl.closeAllCache()
+	defer writingWg.Wait()
+	defer dl.cancel()
 	for i, item := range dl.items {
 		go func() {
 			err := <-item.err
@@ -217,28 +216,6 @@ func (dl *downloader) downloadImagesTo(f func(int, Image, error)) error {
 		}()
 	}
 	return nil
-}
-
-func (dl *downloader) downloadPage() ([]PageData, error) {
-	results := make([]PageData, 0, len(dl.items))
-	for img, err := range dl.downloadIterPage() {
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, img)
-	}
-	return results, nil
-}
-
-func (dl *downloader) downloadImage() ([]Image, error) {
-	results := make([]Image, 0, len(dl.items))
-	for img, err := range dl.downloadIterImage() {
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, img)
-	}
-	return results, nil
 }
 
 // initDownloadGallery

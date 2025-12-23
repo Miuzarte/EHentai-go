@@ -249,31 +249,6 @@ func DownloadPagesTo(ctx context.Context, pageUrls []string, f func(int, PageDat
 	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPagesTo(f)
 }
 
-// DownloadCovers 通过搜索结果下载封面
-func DownloadCovers(ctx context.Context, results coverProviders) ([]Image, error) {
-	return newDownloader(ctx, newImageDownload(results.GetCover())).downloadImage()
-}
-
-// DownloadGallery 下载画廊下所有图片, 下载失败时自动尝试备链
-//
-// 不传入 pageNums 参数时下载所有页, 传入时按其顺序下载指定页, 重复、越界页将被忽略
-func DownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int) ([]PageData, error) {
-	pageUrls, availableCache, err := initDownloadGallery(ctx, galleryUrl, pageNums...)
-	if err != nil {
-		return nil, err
-	}
-	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPage()
-}
-
-// DownloadPages 下载画廊某页的图片, 下载失败时自动尝试备链
-func DownloadPages(ctx context.Context, pageUrls ...string) ([]PageData, error) {
-	availableCache, err := initDownloadPages(pageUrls)
-	if err != nil {
-		return nil, err
-	}
-	return newDownloader(ctx, newPageDownload(pageUrls, availableCache)).downloadPage()
-}
-
 // FetchGalleryDetails 获取画廊详细信息与所有页链接
 func FetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
 	return fetchGalleryDetails(ctx, galleryUrl)
