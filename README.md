@@ -14,6 +14,17 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 
 ## 用法
 
+### 开始
+
+```bash
+go get github.com/Miuzarte/EHentai-go
+```
+
+```go
+package main
+import ehentai "github.com/Miuzarte/EHentai-go"
+```
+
 ### 设置 Cookie (初始化时会尝试读取环境变量)
 
 ```go
@@ -27,16 +38,16 @@ EHentai access for go, with EhTagTranslation support, fully leveraging Go's conc
 
 // igneous 为空时, 会尝试使用 exh 下发的 igneous
 // sk 为空时, 搜索结果标题只有英文
-EHentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
+ehentai.SetCookie("ipb_member_id", "ipb_pass_hash", "igneous", "sk")
 // 也可以直接设置字符串
-EHentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
+ehentai.SetCookieFromString("ipb_member_id=123; ipb_pass_hash=abc; igneous=456; sk=efg")
 
 // 注册 igneous 更新回调
-EHentai.RegisterIgneousUpdate(func(igneous string) {
+ehentai.RegisterIgneousUpdate(func(igneous string) {
     log.Printf("igneous updated: %s\n", igneous)
 })
 // 允许 igneous 被下发覆盖为 "mystery", 默认 false
-EHentai.SetAcceptIgneousMystery(false)
+ehentai.SetAcceptIgneousMystery(false)
 ```
 
 ### 初始化 [EhTagTranslation](https://github.com/EhTagTranslation/Database) 数据库
@@ -45,7 +56,7 @@ EHentai.SetAcceptIgneousMystery(false)
 tStart := time.Now()
 // 在 AMD Ryzen 5600x(6c12t) 上, 解析数据大概耗时 4ms
 // 要更新的话再调用一次
-err := EHentai.InitEhTagDb()
+err := ehentai.InitEhTagDb()
 if err != nil {
     log.Fatalln(err)
 }
@@ -53,14 +64,14 @@ if err != nil {
 log.Printf("InitEhTagDb took %s\n", time.Since(tStart))
 
 // 释放数据库
-EHentai.FreeEhTagDb()
+ehentai.FreeEhTagDb()
 ```
 
 ### 设置下载并发数
 
 ```go
 // 默认为 4
-EHentai.SetThreads(4)
+ehentai.SetThreads(4)
 ```
 
 ### 设置是否使用系统环境变量中的代理
@@ -68,14 +79,14 @@ EHentai.SetThreads(4)
 ```go
 // 默认为 true
 // 配合域名前置设置为 false 食用
-EHentai.SetUseEnvPorxy(true)
+ehentai.SetUseEnvProxy(true)
 ```
 
 ### 设置 query nl 的重试次数
 
 ```go
 // 默认只尝试两次
-EHentai.SetRetryDepth(2)
+ehentai.SetRetryDepth(2)
 ```
 
 以 `s/b7a3ead2d6/3138775-24` 为例, 图片加载失败时, 页面会根据 `#loadfail` 的内容前往新页面 `s/b7a3ead2d6/3138775-24?nl=45453-483314`
@@ -90,7 +101,7 @@ EHentai.SetRetryDepth(2)
 
 ```go
 // 默认为 false
-EHentai.SetDomainFronting(false)
+ehentai.SetDomainFronting(false)
 ```
 
 ### 自定义域名前置所使用的 ip 获取器
@@ -103,8 +114,8 @@ IpProvider 实现示例: [internal/usage/network.go:MyIpProvider](internal/usage
 //     NextIp(host string) string
 //     AddUnavailableIp(host, ip string)
 // }
-myIpProvider := EHentai.IpProvider(&MyIpProvider{})
-EHentai.SetCustomIpProvider(myIpProvider)
+myIpProvider := ehentai.IpProvider(&MyIpProvider{})
+ehentai.SetCustomIpProvider(myIpProvider)
 ```
 
 ### 设置缓存
@@ -113,21 +124,21 @@ EHentai.SetCustomIpProvider(myIpProvider)
 // 设置元数据缓存启用状态
 // 默认为 true
 // 以避免频繁请求官方 api
-EHentai.SetMetadataCacheEnabled(true)
+ehentai.SetMetadataCacheEnabled(true)
 
 // 设置自动缓存启用状态
 // 默认为 false
 // 启用时会同时启用元数据缓存
 // 下载画廊时: 自动缓存所有下载的页
 // 下载页时: 存在该画廊的缓存时, 自动缓存所下载的页
-EHentai.SetAutoCacheEnabled(false)
+ehentai.SetAutoCacheEnabled(false)
 
 // 设置缓存文件夹路径
 // 留空默认为 "./EHentaiCache/"
 // 路径形如 "EHentaiCache/3138775/metadata",
 // "EHentaiCache/3138775/1.webp",
 // "EHentaiCache/3138775/2.webp"...
-EHentai.SetCacheDir("path/to/cache")
+ehentai.SetCacheDir("path/to/cache")
 ```
 
 ### 自行管理缓存
@@ -143,8 +154,8 @@ ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
 // 没做翻页, results 可能比 total 要少
-total, results, err := EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword)
-// total, results, err := EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword)
+total, results, err := ehentai.FSearch(ctx, ehentai.EHENTAI_URL, keyword)
+// total, results, err := ehentai.FSearch(ctx, ehentai.EXHENTAI_URL, keyword)
 if err != nil {
     log.Fatalln(err)
 }
@@ -154,16 +165,25 @@ for _, result := range results {
 }
 
 // 两种传法
-cate1 := EHentai.CATEGORY_DOUJINSHI | EHentai.CATEGORY_MANGA
-cate2 := []EHentai.Category{EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA}
+cate1 := ehentai.CATEGORY_DOUJINSHI | ehentai.CATEGORY_MANGA
+cate2 := []ehentai.Category{ehentai.CATEGORY_DOUJINSHI, ehentai.CATEGORY_MANGA}
 
 // 也可以分类搜索
-EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword, cate1)
-EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
+ehentai.FSearch(ctx, ehentai.EHENTAI_URL, keyword, cate1)
+ehentai.FSearch(ctx, ehentai.EXHENTAI_URL, keyword, cate2...)
 
 // 搜索同时通过官方 api 获取详细信息
-EHentai.SearchDetail(ctx, EHentai.EHENTAI_URL, keyword, cate1)
-EHentai.SearchDetail(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
+ehentai.SearchDetail(ctx, ehentai.EHENTAI_URL, keyword, cate1)
+ehentai.SearchDetail(ctx, ehentai.EXHENTAI_URL, keyword, cate2...)
+
+// 下载搜索结果封面
+for image, err := range ehentai.DownloadCoversIter(ctx, results) {
+    if err != nil {
+        log.Println(err)
+        break
+    }
+    log.Println(image.String())
+}
 ```
 
 ### 下载画廊 / 下载页
@@ -182,7 +202,7 @@ pageUrls := []string{
 
 // 以迭代器模式:
 // 下载整个画廊
-for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
+for pageData, err := range ehentai.DownloadGalleryIter(ctx, gUrl) {
     if err != nil {
         log.Println(err)
         // 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出
@@ -193,22 +213,22 @@ for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
     log.Println(pageData.String())
 }
 // 下载画廊中的指定页
-for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
+for pageData, err := range ehentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
     _ = pageData
     _ = err
 }
 // 下载画廊页
-for pageData, err := range EHentai.DownloadPagesIter(ctx, pageUrls...) {
+for pageData, err := range ehentai.DownloadPagesIter(ctx, pageUrls...) {
     _ = pageData
     _ = err
 }
 
 // 下载全部一起返回:
-pageDatas, err := EHentai.DownloadGallery(ctx, gUrl)
+pageDatas, err := ehentai.DownloadGallery(ctx, gUrl)
 _ = pageDatas
 _ = err
-_, _ = EHentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
-_, _ = EHentai.DownloadPages(ctx, pageUrls...)
+_, _ = ehentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
+_, _ = ehentai.DownloadPages(ctx, pageUrls...)
 ```
 
 ### 通过回调函数完全异步地下载
@@ -218,8 +238,8 @@ _, _ = EHentai.DownloadPages(ctx, pageUrls...)
 reader := myReader{}
 reader.Ctx, reader.Cancel = context.WithCancel(context.Background())
 reader.Images = make([]widgetsImage, reader.Gallery.Length)
-go EHentai.DownloadPagesTo(reader.Ctx, reader.Gallery.PageUrls,
-    func(i int, pd EHentai.PageData, err error) {
+go ehentai.DownloadPagesTo(reader.Ctx, reader.Gallery.PageUrls,
+    func(i int, pd ehentai.PageData, err error) {
         if err != nil {
             reader.Images[i].Err = err
             log.Printf("page %d error: %v", i, err)
@@ -239,7 +259,7 @@ ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
 const gUrl = "https://e-hentai.org/g/3138775/30b0285f9b"
-galleryDetails, err := EHentai.FetchGalleryDetails(ctx, gUrl)
+galleryDetails, err := ehentai.FetchGalleryDetails(ctx, gUrl)
 if err != nil {
     panic(err)
 }

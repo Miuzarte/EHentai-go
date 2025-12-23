@@ -5,7 +5,7 @@ import (
 	"image"
 	"log"
 
-	"github.com/Miuzarte/EHentai-go"
+	ehentai "github.com/Miuzarte/EHentai-go"
 )
 
 // 下载画廊 / 下载页
@@ -23,7 +23,7 @@ func UsageDownload() {
 
 	// 以迭代器模式:
 	// 下载整个画廊
-	for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
+	for pageData, err := range ehentai.DownloadGalleryIter(ctx, gUrl) {
 		if err != nil {
 			log.Println(err)
 			// 获取画廊信息出错时, 第一次循环就会返回 err 然后跳出
@@ -34,22 +34,22 @@ func UsageDownload() {
 		log.Println(pageData.String())
 	}
 	// 下载画廊中的指定页
-	for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
+	for pageData, err := range ehentai.DownloadGalleryIter(ctx, gUrl, 9, 10, 11) {
 		_ = pageData
 		_ = err
 	}
 	// 下载画廊页
-	for pageData, err := range EHentai.DownloadPagesIter(ctx, pageUrls...) {
+	for pageData, err := range ehentai.DownloadPagesIter(ctx, pageUrls...) {
 		_ = pageData
 		_ = err
 	}
 
 	// 下载全部一起返回:
-	pageDatas, err := EHentai.DownloadGallery(ctx, gUrl)
+	pageDatas, err := ehentai.DownloadGallery(ctx, gUrl)
 	_ = pageDatas
 	_ = err
-	_, _ = EHentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
-	_, _ = EHentai.DownloadPages(ctx, pageUrls...)
+	_, _ = ehentai.DownloadGallery(ctx, gUrl, 9, 10, 11)
+	_, _ = ehentai.DownloadPages(ctx, pageUrls...)
 }
 
 // 通过回调函数完全异步地下载
@@ -58,8 +58,8 @@ func UsageDownloadAsync() {
 	reader := myReader{}
 	reader.Ctx, reader.Cancel = context.WithCancel(context.Background())
 	reader.Images = make([]widgetsImage, reader.Gallery.Length)
-	go EHentai.DownloadPagesTo(reader.Ctx, reader.Gallery.PageUrls,
-		func(i int, pd EHentai.PageData, err error) {
+	go ehentai.DownloadPagesTo(reader.Ctx, reader.Gallery.PageUrls,
+		func(i int, pd ehentai.PageData, err error) {
 			if err != nil {
 				reader.Images[i].Err = err
 				log.Printf("page %d error: %v", i, err)
@@ -76,7 +76,7 @@ type myReader struct {
 	Ctx    context.Context
 	Cancel context.CancelFunc
 
-	Gallery EHentai.GalleryDetails
+	Gallery ehentai.GalleryDetails
 	Cover   widgetsImage
 	Images  []widgetsImage
 
@@ -94,7 +94,7 @@ func UsageFetchGalleryPageUrls() {
 	defer cancel()
 
 	const gUrl = "https://e-hentai.org/g/3138775/30b0285f9b"
-	galleryDetails, err := EHentai.FetchGalleryDetails(ctx, gUrl)
+	galleryDetails, err := ehentai.FetchGalleryDetails(ctx, gUrl)
 	if err != nil {
 		panic(err)
 	}

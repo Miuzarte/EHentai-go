@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/Miuzarte/EHentai-go"
+	ehentai "github.com/Miuzarte/EHentai-go"
 )
 
 // 搜索 E(x)Hentai
@@ -15,7 +15,7 @@ func UsageSearch() {
 	defer cancel()
 
 	// 没做翻页, results 可能比 total 要少
-	total, results, err := EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword)
+	total, results, err := ehentai.FSearch(ctx, ehentai.EHENTAI_URL, keyword)
 	// total, results, err := EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword)
 	if err != nil {
 		log.Fatalln(err)
@@ -26,14 +26,23 @@ func UsageSearch() {
 	}
 
 	// 两种传法
-	cate1 := EHentai.CATEGORY_DOUJINSHI | EHentai.CATEGORY_MANGA
-	cate2 := []EHentai.Category{EHentai.CATEGORY_DOUJINSHI, EHentai.CATEGORY_MANGA}
+	cate1 := ehentai.CATEGORY_DOUJINSHI | ehentai.CATEGORY_MANGA
+	cate2 := []ehentai.Category{ehentai.CATEGORY_DOUJINSHI, ehentai.CATEGORY_MANGA}
 
 	// 也可以分类搜索
-	EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword, cate1)
-	EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
+	ehentai.FSearch(ctx, ehentai.EHENTAI_URL, keyword, cate1)
+	ehentai.FSearch(ctx, ehentai.EXHENTAI_URL, keyword, cate2...)
 
 	// 搜索同时通过官方 api 获取详细信息
-	EHentai.SearchDetail(ctx, EHentai.EHENTAI_URL, keyword, cate1)
-	EHentai.SearchDetail(ctx, EHentai.EXHENTAI_URL, keyword, cate2...)
+	ehentai.SearchDetail(ctx, ehentai.EHENTAI_URL, keyword, cate1)
+	ehentai.SearchDetail(ctx, ehentai.EXHENTAI_URL, keyword, cate2...)
+
+	// 下载搜索结果封面
+	for image, err := range ehentai.DownloadCoversIter(ctx, results) {
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		log.Println(image.String())
+	}
 }

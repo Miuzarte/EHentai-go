@@ -49,8 +49,8 @@ func SetDomainFronting(b bool) {
 }
 
 // SetCustomIpProvider 自定义域名前置所使用的 ip 获取器
-func SetCustomIpProvider(iPprovider IpProvider) {
-	domainFrontingInterceptor.IpProvider = iPprovider
+func SetCustomIpProvider(ipProvider IpProvider) {
+	domainFrontingInterceptor.IpProvider = ipProvider
 }
 
 func AddInterceptors(interceptors ...Interceptor) {

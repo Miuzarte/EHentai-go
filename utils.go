@@ -32,7 +32,6 @@ func UrlGetGIdGToken(u string) (domain Domain, gId string, gToken string) {
 	// https://e-hentai.org/g/{gallery_id}/{gallery_token}
 	// https://e-hentai.org/g/3138775/30b0285f9b
 	u = strings.TrimSuffix(u, "/")
-	// u = strings.TrimRight(u, "/") // why trim right?
 	splits := strings.Split(u, "/")
 	for i, s := range splits {
 		if s == "g" {
@@ -58,7 +57,6 @@ func UrlGetPTokenGIdPNum(u string) (domain Domain, pToken string, gId string, pN
 	// https://e-hentai.org/s/{page_token}/{gallery_id}-{pagenumber}
 	// https://e-hentai.org/s/0b2127ea05/3138775-8
 	u = strings.TrimSuffix(u, "/")
-	// u = strings.TrimRight(u, "/")
 	splits := strings.Split(u, "/")
 	for i, s := range splits {
 		if s == "s" {

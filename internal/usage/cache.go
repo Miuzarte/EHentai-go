@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/Miuzarte/EHentai-go"
+	ehentai "github.com/Miuzarte/EHentai-go"
 )
 
 // 设置缓存
@@ -12,38 +12,38 @@ func UsageConfigureCache() {
 	// 设置元数据缓存启用状态
 	// 默认为 true
 	// 以避免频繁请求官方 api
-	EHentai.SetMetadataCacheEnabled(true)
+	ehentai.SetMetadataCacheEnabled(true)
 
 	// 设置自动缓存启用状态
 	// 默认为 false
 	// 启用时会同时启用元数据缓存
 	// 下载画廊时: 自动缓存所有下载的页
 	// 下载页时: 存在该画廊的缓存时, 自动缓存所下载的页
-	EHentai.SetAutoCacheEnabled(false)
+	ehentai.SetAutoCacheEnabled(false)
 
 	// 设置缓存文件夹路径
 	// 留空默认为 "./EHentaiCache/"
 	// 路径形如 "EHentaiCache/3138775/metadata",
 	// "EHentaiCache/3138775/1.webp",
 	// "EHentaiCache/3138775/2.webp"...
-	EHentai.SetCacheDir("path/to/cache")
+	ehentai.SetCacheDir("path/to/cache")
 }
 
 // 自行管理缓存
 func UsageManageCache() {
 	// 确保没有启用自动缓存
-	EHentai.SetAutoCacheEnabled(false)
+	ehentai.SetAutoCacheEnabled(false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	const gUrl = "https://e-hentai.org/g/3138775/30b0285f9b"
-	gallery := EHentai.UrlToGallery(gUrl)
+	gallery := ehentai.UrlToGallery(gUrl)
 
-	var gMeta *EHentai.GalleryMetadata
+	var gMeta *ehentai.GalleryMetadata
 	var pageUrls []string
 
-	resp, err := EHentai.PostGalleryMetadata(ctx, gallery)
+	resp, err := ehentai.PostGalleryMetadata(ctx, gallery)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -51,13 +51,13 @@ func UsageManageCache() {
 	// gMeta 中没有域名信息所以需要单独传
 	// gMeta 画廊元数据不可为空
 	// pageUrls 为空时会自动获取
-	cache, err := EHentai.CreateCache(EHentai.EHENTAI_DOMAIN, gMeta, pageUrls)
+	cache, err := ehentai.CreateCache(ehentai.EHENTAI_DOMAIN, gMeta, pageUrls)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	// 下载画廊
-	for pageData, err := range EHentai.DownloadGalleryIter(ctx, gUrl) {
+	for pageData, err := range ehentai.DownloadGalleryIter(ctx, gUrl) {
 		if err != nil {
 			log.Println(err)
 			break
@@ -73,7 +73,7 @@ func UsageManageCache() {
 	}
 
 	// 也可以直接从 url 创建, 省去手动获取画廊元数据
-	cache, err = EHentai.CreateCacheFromUrl(ctx, gUrl)
+	cache, err = ehentai.CreateCacheFromUrl(ctx, gUrl)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -90,7 +90,7 @@ func UsageManageCache() {
 	// 如果没有缓存 会返回 [EHentai.ErrPageNotCached] 错误
 	for pageData, err := range cache.ReadIter([]int{4, 5, 6}) {
 		if err != nil {
-			if EHentai.UnwrapErr(err).Is(EHentai.ErrPageNotCached) {
+			if ehentai.UnwrapErr(err).Is(ehentai.ErrPageNotCached) {
 				log.Printf("Page %d not cached\n", pageData.PageNum)
 				continue
 			}
@@ -122,5 +122,5 @@ func UsageManageCache() {
 	cache.DeletePages([]int{4, 5, 6})
 
 	// 删除整个画廊缓存, 包括元数据
-	EHentai.DeleteCache(EHentai.UrlToGallery(gUrl).GalleryId)
+	ehentai.DeleteCache(ehentai.UrlToGallery(gUrl).GalleryId)
 }
