@@ -76,20 +76,20 @@ func CreateCacheFromUrl(ctx context.Context, gUrl string) (cache *cacheGallery, 
 	}
 
 	if gallery == nil {
-		resp, err := PostGalleryMetadata(ctx, gu)
+		metadatas, err := PostGalleryMetadata(ctx, gu)
 		if err != nil {
 			return nil, err
 		}
-		if len(resp.GMetadata) == 0 {
+		if len(metadatas) == 0 {
 			return nil, wrapErr(ErrFailedToGetGalleryMetadata, nil)
 		}
-		if resp.GMetadata[0].Error != "" {
-			return nil, wrapErr(ErrGalleryMetadataError, resp.GMetadata[0].Error)
+		if metadatas[0].Error != "" {
+			return nil, wrapErr(ErrGalleryMetadataError, metadatas[0].Error)
 		}
-		gallery = &resp.GMetadata[0]
+		gallery = &metadatas[0]
 	}
 	if len(pageUrls) == 0 {
-		gallery, err := fetchGalleryDetails(ctx, gUrl)
+		gallery, err := fetchGalleryDetailsTryCache(ctx, gUrl)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +297,7 @@ func (cg *cacheGallery) Write(pages ...PageData) (n int, err error) {
 			return n, wrapErr(ErrEmptyData, page.PageNum)
 		}
 
-		pageInfo := CachePageInfo{page.Page.PageNum, int(page.Type), len(page.Data)}
+		pageInfo := CachePageInfo{page.Page.PageNum, page.Type, len(page.Data)}
 
 		err := os.WriteFile(cg.getPagePath(pageInfo), page.Data, 0o644)
 		if err != nil {

@@ -217,12 +217,12 @@ func galleryDownload(ctx context.Context, galleryUrls []string, sss utils.SliceS
 	for i, gId := range dl.GIds {
 		gl[i] = dl.Gallerys[gId]
 	}
-	resp, err := EHentai.PostGalleryMetadata(ctx, gl...)
+	metadatas, err := EHentai.PostGalleryMetadata(ctx, gl...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.GMetadata) != len(dl.GIds) {
-		return nil, fmt.Errorf("len(resp.GMetadata)(%d) != len(dl.GIds)(%d)", len(resp.GMetadata), len(dl.GIds))
+	if len(metadatas) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(metadatas)(%d) != len(dl.GIds)(%d)", len(metadatas), len(dl.GIds))
 	}
 
 	// 获取画廊页链接 同时解析 [utils.SliceSyntaxes]
@@ -285,25 +285,25 @@ func pagesDownload(ctx context.Context, pageUrls []string) (dl *ehentaiDownload,
 	for i, gId := range dl.GIds {
 		pageList[i] = EHentai.UrlToPage(dl.PageUrls[gId][0])
 	}
-	resp1, err := EHentai.PostGalleryToken(ctx, pageList...)
+	tokens, err := EHentai.PostGalleryToken(ctx, pageList...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp1.TokenLists) != len(dl.GIds) {
-		return nil, fmt.Errorf("len(resp1.TokenLists)(%d) != len(dl.GIds)(%d)", len(resp1.TokenLists), len(dl.GIds))
+	if len(tokens) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(tokens)(%d) != len(dl.GIds)(%d)", len(tokens), len(dl.GIds))
 	}
 
 	// 获取画廊元数据
 	gl := make([]EHentai.GIdList, len(dl.GIds))
 	for i := range dl.GIds {
-		gl[i] = resp1.TokenLists[i].ToGallery()
+		gl[i] = tokens[i].ToGallery()
 	}
-	resp2, err := EHentai.PostGalleryMetadata(ctx, gl...)
+	metadatas, err := EHentai.PostGalleryMetadata(ctx, gl...)
 	if err != nil {
 		return nil, err
 	}
-	if len(resp2.GMetadata) != len(dl.GIds) {
-		return nil, fmt.Errorf("len(resp2.GMetadata)(%d) != len(dl.GIds)(%d)", len(resp2.GMetadata), len(dl.GIds))
+	if len(metadatas) != len(dl.GIds) {
+		return nil, fmt.Errorf("len(metadatas)(%d) != len(dl.GIds)(%d)", len(metadatas), len(dl.GIds))
 	}
 
 	// 进度条

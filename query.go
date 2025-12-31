@@ -137,11 +137,11 @@ func searchDetail(ctx context.Context, url Url, keyword string, categories ...Ca
 	for i := range results {
 		list[i] = results[i].Gallery
 	}
-	resp, err := PostGalleryMetadata(ctx, list...)
+	metadatas, err := PostGalleryMetadata(ctx, list...)
 	if err != nil {
 		return 0, nil, err
 	}
-	return total, resp.GMetadata, nil
+	return total, metadatas, nil
 }
 
 // Found about 192,819 results.
@@ -326,23 +326,34 @@ func queryFSearch(ctx context.Context, url Url, keyword string, categories ...Ca
 	return
 }
 
-// Showing 1 - 20 of 2,000 images
-// Showing 1 - 20 of 65 images
-// Showing 1 - 5 of 5 images
-// Showing 1 - 1 of 1 image (?
 var (
-	numReg      = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
 	coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
+	// Showing 1 - 20 of 2,000 images
+	// Showing 1 - 20 of 65 images
+	// Showing 1 - 5 of 5 images
+	// Showing 1 - 1 of 1 image (?
+	numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
 )
+
+var ErrInvalidUrl = errors.New("invalid url")
+
+func fetchGalleryDetailsTryCache(ctx context.Context, galleryUrl string) (GalleryDetails, error) {
+	g := UrlToGallery(galleryUrl)
+	if g.GalleryId == 0 {
+		return GalleryDetails{}, wrapErr(ErrInvalidUrl, galleryUrl)
+	}
+
+	if gallery := DetailsCacheRead(g.GalleryId); gallery != nil {
+		return *gallery, nil
+	}
+
+	// inline optimized
+	return fetchGalleryDetails(ctx, galleryUrl)
+}
 
 func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	g := UrlToGallery(galleryUrl)
-	if gallery := DetailsCacheRead(g.GalleryId); gallery != nil {
-		return *gallery, nil
-	}
 
 	defer func() {
 		if err == nil {
@@ -362,28 +373,6 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 	// title    "#gn"
 	// titleJpn "#gj"
 
-	// cat      "#gdc > div"
-	// uploader "#gdn > a:nth-child(1)"
-
-	// posted     "#gdd > table > tbody > tr:nth-child(1) > td.gdt2"
-	// parent     "#gdd > table > tbody > tr:nth-child(2) > td.gdt2"
-	//            "#gdd > table > tbody > tr:nth-child(2) > td.gdt2 > a" // galleryId
-	// visible    "#gdd > table > tbody > tr:nth-child(3) > td.gdt2"
-	// language   "#gdd > table > tbody > tr:nth-child(4) > td.gdt2"        // "Chinese &nbsp;"
-	// translated "#gdd > table > tbody > tr:nth-child(4) > td.gdt2 > span" // 译本存在 "TR" 标
-	// fileSize   "#gdd > table > tbody > tr:nth-child(5) > td.gdt2"
-	// length     "#gdd > table > tbody > tr:nth-child(6) > td.gdt2"
-	// favorited  "#gdd > table > tbody > tr:nth-child(7) > td.gdt2" // "3745 times"
-	//            "#favcount"
-
-	// ratingCount "#rating_count"
-	// rating      "#rating_label" // "Average: 4.86"
-
-	// tags         "#taglist > table > tbody"
-	// tagNamespace "#taglist > table > tbody > tr:nth-child(1) > td:nth-child(1)" // "language:"
-	// tag          "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(1) > a" // "chinese"
-	//              "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(2) > a" // "translated"
-
 	var cover string
 	doc.Find("#gd1 > div").Each(func(i int, sel *goquery.Selection) {
 		style, exists := sel.Attr("style")
@@ -398,8 +387,22 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 	title := doc.Find("#gn").Text()
 	titleJpn := doc.Find("#gj").Text()
 
+	// cat      "#gdc > div"
+	// uploader "#gdn > a:nth-child(1)"
+
 	cat := doc.Find("#gdc > div").Text()
 	uploader := doc.Find("#gdn > a:nth-child(1)").Text()
+
+	// posted     "#gdd > table > tbody > tr:nth-child(1) > td.gdt2"
+	// parent     "#gdd > table > tbody > tr:nth-child(2) > td.gdt2"
+	//            "#gdd > table > tbody > tr:nth-child(2) > td.gdt2 > a"    // galleryId
+	// visible    "#gdd > table > tbody > tr:nth-child(3) > td.gdt2"
+	// language   "#gdd > table > tbody > tr:nth-child(4) > td.gdt2"        // "Chinese &nbsp;"
+	// translated "#gdd > table > tbody > tr:nth-child(4) > td.gdt2 > span" // 译本存在 "TR" 标
+	// fileSize   "#gdd > table > tbody > tr:nth-child(5) > td.gdt2"
+	// length     "#gdd > table > tbody > tr:nth-child(6) > td.gdt2"
+	// favorited  "#gdd > table > tbody > tr:nth-child(7) > td.gdt2"        // "3745 times"
+	//            "#favcount"
 
 	gdd := doc.Find("#gdd > table > tbody")
 	posted := gdd.Find("tr:nth-child(1) > td.gdt2").Text()
@@ -418,9 +421,11 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 	favorited = strings.TrimSuffix(favorited, " times") // "3745 times"
 	favoritedNum, _ := atoi(favorited)
 
+	// ratingCount  "#rating_count"
+	// rating       "#rating_label" // "Average: 4.86"
+
 	ratingCount := doc.Find("#rating_count").Text()
 	ratingCountNum, _ := atoi(ratingCount)
-
 	rating := doc.Find("#rating_label").Text()
 	rating = strings.TrimPrefix(rating, "Average: ") // "Average: 4.86"
 	rating = strings.TrimSpace(rating)
@@ -429,6 +434,11 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 		err = wrapErr(ErrNotANumber, rating)
 		return
 	}
+
+	// tags         "#taglist > table > tbody"
+	// tagNamespace "#taglist > table > tbody > tr:nth-child(1) > td:nth-child(1)"                        // "language:"
+	// tag          "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(1) > a" // "chinese"
+	//              "#taglist > table > tbody > tr:nth-child(x) > td:nth-child(2) > div:nth-child(2) > a" // "translated"
 
 	var tags []Tag
 	taglist := doc.Find("#taglist > table > tbody")
@@ -482,8 +492,6 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 	errs := make(chan error, pages)
 
 	wg := sync.WaitGroup{}
-	wg.Add(pages)
-
 	limiter := newLimiter()
 	defer limiter.close()
 
@@ -494,11 +502,8 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 		case limiter.acquire() <- struct{}{}:
 		}
 
-		go func(page int) {
-			defer func() {
-				limiter.release()
-				wg.Done()
-			}()
+		wg.Go(func() {
+			defer limiter.release()
 
 			var pageDoc *goquery.Document
 			if page == 0 { // 起始页不需要重新加载
@@ -522,7 +527,8 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 				url := s.AttrOr("href", "")
 				pageUrls[index] = url
 			})
-		}(page)
+		})
+
 	}
 
 	go func() {
@@ -546,12 +552,13 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 
 	domain, gId, gToken := UrlGetGIdGToken(galleryUrl)
 	gIdNum, _ := atoi(gId)
-	return GalleryDetails{
+	gallery = GalleryDetails{
 		Domain: domain,
 		Gallery: Gallery{
 			GalleryId:    gIdNum,
 			GalleryToken: gToken,
 		},
+
 		Cover:    cover,
 		Title:    title,
 		TitleJpn: titleJpn,
@@ -574,119 +581,8 @@ func fetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery Galler
 		Tags: tags,
 
 		PageUrls: pageUrls,
-	}, nil
-}
-
-// fetchGalleryPages 遍历获取所有页链接
-//
-// Deprecated: [fetchGalleryDetails] [GalleryDetails.PageUrls]
-func fetchGalleryPages(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
-	defer func() {
-		if err == nil {
-			// 缓存页链接
-			g := UrlToGallery(galleryUrl)
-			metaCacheWrite(g.GalleryId, nil, pageUrls)
-		}
-	}()
-
-	doc, err := httpGetDoc(ctx, galleryUrl)
-	if err != nil {
-		return nil, err
 	}
-
-	// body > div:nth-child(*) > p
-	// <p class="gpc">Showing 1 - 5 of 5 images</p>
-	numImages := doc.Find(".gpc").Text()
-	matches := numReg.FindStringSubmatch(numImages)
-	if len(matches) == 0 {
-		return nil, wrapErr(ErrRegMismatch, numImages)
-	}
-	if matches[1] == "" || matches[2] == "" {
-		return nil, wrapErr(ErrRegEmptyMatch, numImages)
-	}
-	matches[2] = strings.ReplaceAll(matches[2], ",", "")
-	end, _ := atoi(matches[1])
-	total, _ := atoi(matches[2])
-	if end == 0 || total == 0 {
-		return nil, wrapErr(ErrNoImage, numImages)
-	}
-	pages := 0
-	if end == total {
-		pages = 1
-	} else if end > total {
-		return nil, wrapErr(ErrEndGreaterThanTotal, numImages)
-	} else {
-		pages = total / end
-		if total%end != 0 {
-			pages++
-		}
-	}
-
-	pageUrls = make([]string, total)
-	errs := make(chan error, pages)
-
-	wg := sync.WaitGroup{}
-	wg.Add(pages)
-
-	limiter := newLimiter()
-	defer limiter.close()
-
-	for page := range pages {
-		select {
-		case <-ctx.Done():
-			return
-		case limiter.acquire() <- struct{}{}:
-		}
-
-		go func(page int) {
-			defer func() {
-				limiter.release()
-				wg.Done()
-			}()
-
-			var pageDoc *goquery.Document
-			if page == 0 { // 起始页不需要重新加载
-				pageDoc = doc
-			} else {
-				u, err := netUrl.Parse(galleryUrl)
-				if err != nil {
-					errs <- err
-					return
-				}
-				u.RawQuery = "p=" + itoa(page)
-				pageDoc, err = httpGetDoc(ctx, u.String())
-				if err != nil {
-					errs <- err
-					return
-				}
-			}
-			// #gdt > a:nth-child(*)
-			pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-				index := page*end + i
-				url := s.AttrOr("href", "")
-				pageUrls[index] = url
-			})
-		}(page)
-	}
-
-	go func() {
-		wg.Wait()
-		close(errs)
-	}()
-
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := range pageUrls {
-		if pageUrls[i] == "" {
-			return nil, wrapErr(ErrFoundEmptyPageUrl, i)
-		}
-	}
-
-	return pageUrls, nil
+	return
 }
 
 // fetchPageImageUrl 获取画廊某页的图直链与页备链

@@ -55,19 +55,19 @@ func getSearchDetail(ctx context.Context) (total int, results []GalleryMetadata,
 }
 
 func TestEhApiPostGalleryMetadata(t *testing.T) {
-	resp, err := PostGalleryMetadata(t.Context(), GIdList{3138775, "30b0285f9b"})
+	metadatas, err := PostGalleryMetadata(t.Context(), GIdList{3138775, "30b0285f9b"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%+v", *resp)
+	t.Logf("%+v", metadatas)
 }
 
 func TestEhApiPostGalleryToken(t *testing.T) {
-	resp, err := PostGalleryToken(t.Context(), PageList{"0b2127ea05", 3138775, 8})
+	tokens, err := PostGalleryToken(t.Context(), PageList{"0b2127ea05", 3138775, 8})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%+v", *resp)
+	t.Logf("%+v", tokens)
 }
 
 func TestEhSearch(t *testing.T) {
@@ -149,19 +149,5 @@ func TestEhDownloadPages(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatal("n != 2")
-	}
-}
-
-func TestEhFetchGalleryPageUrls(t *testing.T) {
-	pageUrls, err := FetchGalleryPageUrls(t.Context(), TEST_GALLERY_URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pageUrls) == 0 {
-		t.Fatal("empty page urls")
-	}
-
-	for _, pageUrl := range pageUrls {
-		t.Log(pageUrl)
 	}
 }

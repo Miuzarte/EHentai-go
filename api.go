@@ -13,11 +13,20 @@ var (
 )
 
 // PostGalleryMetadata posts to the official API and returns gallery metadata
-func PostGalleryMetadata(ctx context.Context, g ...GIdList) (resp *GalleryMetadataResponse, err error) {
+func PostGalleryMetadata(ctx context.Context, g ...GIdList) (metadatas []GalleryMetadata, err error) {
+	type request struct {
+		Method    string  `json:"method"`
+		GIdList   [][]any `json:"gidlist"`
+		Namespace int     `json:"namespace"`
+	}
+	type response struct {
+		GMetadata []GalleryMetadata `json:"gmetadata"`
+	}
+
 	defer func() {
-		if resp != nil && err == nil {
+		if err == nil {
 			// 缓存元数据
-			for _, g := range resp.GMetadata {
+			for _, g := range metadatas {
 				// 接口未返回错误时存入
 				if g.Error == "" {
 					metaCacheWrite(g.GId, &g, nil)
@@ -27,10 +36,11 @@ func PostGalleryMetadata(ctx context.Context, g ...GIdList) (resp *GalleryMetada
 	}()
 
 	if len(g) == 0 {
-		return nil, wrapErr(ErrNoGalleryProvided, nil)
+		err = wrapErr(ErrNoGalleryProvided, nil)
+		return
 	}
 
-	reqBody := GalleryMetadataRequest{
+	reqBody := request{
 		Method:    "gdata",
 		GIdList:   make([][]any, 0, len(g)),
 		Namespace: 1,
@@ -39,16 +49,30 @@ func PostGalleryMetadata(ctx context.Context, g ...GIdList) (resp *GalleryMetada
 		reqBody.GIdList = append(reqBody.GIdList, []any{gallery.GalleryId, gallery.GalleryToken})
 	}
 
-	return post[GalleryMetadataResponse](ctx, API_URL, reqBody)
+	resp, err := post[response](ctx, API_URL, reqBody)
+	if err != nil {
+		return
+	}
+	metadatas = resp.GMetadata
+	return
 }
 
 // PostGalleryToken posts to the official API and returns gallery token
-func PostGalleryToken(ctx context.Context, p ...PageList) (*GalleryTokenResponse, error) {
-	if len(p) == 0 {
-		return nil, wrapErr(ErrNoPageProvided, nil)
+func PostGalleryToken(ctx context.Context, p ...PageList) (tokens []TokenList, err error) {
+	type request struct {
+		Method   string  `json:"method"`
+		PageList [][]any `json:"pagelist"`
+	}
+	type response struct {
+		TokenLists []TokenList `json:"tokenlist"`
 	}
 
-	reqBody := GalleryTokenRequest{
+	if len(p) == 0 {
+		err = wrapErr(ErrNoPageProvided, nil)
+		return
+	}
+
+	reqBody := request{
 		Method:   "gtoken",
 		PageList: make([][]any, 0, len(p)),
 	}
@@ -56,5 +80,10 @@ func PostGalleryToken(ctx context.Context, p ...PageList) (*GalleryTokenResponse
 		reqBody.PageList = append(reqBody.PageList, []any{page.GalleryId, page.PageToken, page.PageNum})
 	}
 
-	return post[GalleryTokenResponse](ctx, API_URL, reqBody)
+	resp, err := post[response](ctx, API_URL, reqBody)
+	if err != nil {
+		return
+	}
+	tokens = resp.TokenLists
+	return
 }

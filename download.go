@@ -155,8 +155,8 @@ func (dl *downloader) closeAllCache() {
 }
 
 func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
-	dl.startBackground()
 	return func(yield func(PageData, error) bool) {
+		dl.startBackground()
 		defer dl.closeAllCache()
 		defer writingWg.Wait()
 		defer dl.cancel()
@@ -169,8 +169,8 @@ func (dl *downloader) downloadIterPage() iter.Seq2[PageData, error] {
 }
 
 func (dl *downloader) downloadIterImage() iter.Seq2[Image, error] {
-	dl.startBackground()
 	return func(yield func(Image, error) bool) {
+		dl.startBackground()
 		defer dl.closeAllCache()
 		defer writingWg.Wait()
 		defer dl.cancel()
@@ -238,7 +238,7 @@ func initDownloadGallery(ctx context.Context, galleryUrl string, pageNums ...int
 	} else if cachedDetails != nil && len(cachedDetails.PageUrls) != 0 {
 		pageUrls = cachedDetails.PageUrls
 	} else {
-		gallery, err := fetchGalleryDetails(ctx, galleryUrl)
+		gallery, err := fetchGalleryDetailsTryCache(ctx, galleryUrl)
 		if err != nil {
 			return nil, nil, err
 		}

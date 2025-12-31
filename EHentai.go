@@ -251,48 +251,5 @@ func DownloadPagesTo(ctx context.Context, pageUrls []string, f func(int, PageDat
 
 // FetchGalleryDetails 获取画廊详细信息与所有页链接
 func FetchGalleryDetails(ctx context.Context, galleryUrl string) (gallery GalleryDetails, err error) {
-	return fetchGalleryDetails(ctx, galleryUrl)
-}
-
-// EHSearch 搜索 EHentai, results 只有第一页结果
-//
-// Deprecated: simply use [FSearch] instead
-//
-//	EHentai.FSearch(ctx, EHentai.EHENTAI_URL, keyword, categories...)
-func EHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
-	return queryFSearch(ctx, EHENTAI_URL, keyword, categories...)
-}
-
-// ExHSearch 搜索 ExHentai, results 只有第一页结果
-//
-// Deprecated: simply use [FSearch] instead
-//
-//	EHentai.FSearch(ctx, EHentai.EXHENTAI_URL, keyword, categories...)
-func ExHSearch(ctx context.Context, keyword string, categories ...Category) (total int, results FSearchResults, err error) {
-	return queryFSearch(ctx, EXHENTAI_URL, keyword, categories...)
-}
-
-// EHSearchDetail 搜索 EHentai 并返回详细信息, galleries 只有第一页结果
-//
-// Deprecated: simply use [SearchDetail] instead
-//
-//	EHentai.SearchDetail(ctx, EHentai.EHENTAI_URL, keyword, categories...)
-func EHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
-	return searchDetail(ctx, EHENTAI_URL, keyword, categories...)
-}
-
-// ExHSearchDetail 搜索 ExHentai 并返回详细信息, galleries 只有第一页结果
-//
-// Deprecated: simply use [SearchDetail] instead
-//
-//	EHentai.SearchDetail(ctx, EHentai.EXHENTAI_URL, keyword, categories...)
-func ExHSearchDetail(ctx context.Context, keyword string, categories ...Category) (total int, galleries GalleryMetadatas, err error) {
-	return searchDetail(ctx, EXHENTAI_URL, keyword, categories...)
-}
-
-// FetchGalleryPageUrls 获取画廊下所有页链接
-//
-// Deprecated: use [FetchGalleryDetails] [GalleryDetails.PageUrls] instead
-func FetchGalleryPageUrls(ctx context.Context, galleryUrl string) (pageUrls []string, err error) {
-	return fetchGalleryPages(ctx, galleryUrl)
+	return fetchGalleryDetailsTryCache(ctx, galleryUrl)
 }

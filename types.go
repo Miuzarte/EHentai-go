@@ -172,7 +172,6 @@ type GalleryDetails struct {
 	RatingCount int     // 271
 	Rating      float64 // 4.86
 
-	// Tags []string // namespace:tag
 	Tags []Tag
 
 	PageUrls []string
@@ -217,22 +216,12 @@ type GalleryMetadata struct {
 
 type GalleryMetadatas []GalleryMetadata
 
-func (gm GalleryMetadatas) GetCover() (urls []string) {
-	urls = make([]string, len(gm))
-	for i := range gm {
-		urls[i] = (gm)[i].Thumb
+func (gms GalleryMetadatas) GetCover() (urls []string) {
+	urls = make([]string, len(gms))
+	for i := range gms {
+		urls[i] = (gms)[i].Thumb
 	}
 	return urls
-}
-
-type GalleryMetadataResponse struct {
-	GMetadata []GalleryMetadata `json:"gmetadata"`
-}
-
-type GalleryMetadataRequest struct {
-	Method    string  `json:"method"`
-	GIdList   [][]any `json:"gidlist"`
-	Namespace int     `json:"namespace"`
 }
 
 // Gallery describes the gallery url
@@ -256,15 +245,6 @@ func (tl *TokenList) ToGallery() Gallery {
 		GalleryId:    tl.GId,
 		GalleryToken: tl.Token,
 	}
-}
-
-type GalleryTokenResponse struct {
-	TokenLists []TokenList `json:"tokenlist"`
-}
-
-type GalleryTokenRequest struct {
-	Method   string  `json:"method"`
-	PageList [][]any `json:"pagelist"`
 }
 
 // Page describes the page url
@@ -312,7 +292,7 @@ type FSearchResults []FSearchResult
 func (fsr FSearchResults) GetCover() (urls []string) {
 	urls = make([]string, len(fsr))
 	for i := range fsr {
-		urls[i] = (fsr)[i].Cover
+		urls[i] = fsr[i].Cover
 	}
 	return urls
 }
@@ -357,9 +337,9 @@ func (pd *PageData) String() string {
 }
 
 type CachePageInfo struct {
-	Num  int `json:"num"`
-	Type int `json:"type"` // see [ImageType]
-	Len  int `json:"len"`
+	Num  int       `json:"num"` // page num
+	Type ImageType `json:"type"`
+	Len  int       `json:"len"` // file size
 }
 
 type CachePageInfos []CachePageInfo
@@ -368,7 +348,7 @@ type CachePageInfos []CachePageInfo
 func (cpi *CachePageInfos) Exts() []ImageType {
 	set := utils.Set[ImageType]{}
 	for _, pageInfo := range *cpi {
-		set.Add(ImageType(pageInfo.Type))
+		set.Add(pageInfo.Type)
 	}
 	return set.Get()
 }
@@ -382,7 +362,7 @@ func (cpi *CachePageInfos) Get(pageNum int) (pageInfo CachePageInfo) {
 			return (*cpi)[i]
 		}
 	}
-	return CachePageInfo{Num: pageNum, Type: 0, Len: 0}
+	return CachePageInfo{Num: pageNum, Type: IMAGE_TYPE_UNKNOWN, Len: 0}
 }
 
 // Lookup 构造哈希表查找页码
@@ -411,20 +391,20 @@ func (cpi *CachePageInfos) Lookup(pageNums []int) (pageInfos CachePageInfos) {
 		if page, ok := pagesMap[pageNum]; ok {
 			pageInfos = append(pageInfos, *page)
 		} else {
-			pageInfos = append(pageInfos, CachePageInfo{Num: pageNum, Type: 0, Len: 0})
+			pageInfos = append(pageInfos, CachePageInfo{Num: pageNum, Type: IMAGE_TYPE_UNKNOWN, Len: 0})
 		}
 	}
 	return pageInfos
 }
 
 func (cpi *CachePageInfos) append(pageInfos ...CachePageInfo) {
-	(*cpi) = append((*cpi), pageInfos...)
+	*cpi = append(*cpi, pageInfos...)
 }
 
 func (cpi *CachePageInfos) del(pageNum int) {
 	for i := range *cpi {
 		if (*cpi)[i].Num == pageNum {
-			*cpi = slices.Delete((*cpi), i, i+1)
+			*cpi = slices.Delete(*cpi, i, i+1)
 			return
 		}
 	}

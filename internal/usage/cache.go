@@ -43,11 +43,11 @@ func UsageManageCache() {
 	var gMeta *ehentai.GalleryMetadata
 	var pageUrls []string
 
-	resp, err := ehentai.PostGalleryMetadata(ctx, gallery)
+	metadatas, err := ehentai.PostGalleryMetadata(ctx, gallery)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	gMeta = &resp.GMetadata[0]
+	gMeta = &metadatas[0]
 	// gMeta 中没有域名信息所以需要单独传
 	// gMeta 画廊元数据不可为空
 	// pageUrls 为空时会自动获取

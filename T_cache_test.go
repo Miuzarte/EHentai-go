@@ -8,16 +8,16 @@ func TestCacheMetadata(t *testing.T) {
 	gMetaCache = newRamCache[int, metaCache](cacheTimeout)
 	metadataCacheEnabled = true
 	var err error
-	var resp *GalleryMetadataResponse
+	var metadatas []GalleryMetadata
 	var gallery GalleryDetails
-	resp, err = PostGalleryMetadata(t.Context(), GIdList{TEST_GALLERY_GID, TEST_GALLERY_GTOKEN})
+	metadatas, err = PostGalleryMetadata(t.Context(), GIdList{TEST_GALLERY_GID, TEST_GALLERY_GTOKEN})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.GMetadata) == 0 {
-		t.Fatal("len(resp.GMetadata) == 0")
+	if len(metadatas) == 0 {
+		t.Fatal("len(metadatas) == 0")
 	}
-	gallery, err = fetchGalleryDetails(t.Context(), TEST_GALLERY_URL)
+	gallery, err = fetchGalleryDetailsTryCache(t.Context(), TEST_GALLERY_URL)
 	if err != nil {
 		t.Fatal(err)
 	}

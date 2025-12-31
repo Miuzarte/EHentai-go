@@ -191,7 +191,9 @@ func itoa[T number](i T) string {
 	return strconv.FormatInt(int64(i), 10)
 }
 
-var atoi = strconv.Atoi
+func atoi(s string) (int, error) {
+	return strconv.Atoi(s)
+}
 
 func cleanOutOfRange(sLen int, indexes []int) (cleaned []int) {
 	if len(indexes) == 0 ||
